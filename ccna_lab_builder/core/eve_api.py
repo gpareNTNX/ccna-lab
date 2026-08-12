@@ -1,6 +1,8 @@
+import json
 import re
 import requests
 from urllib.parse import quote
+
 
 class EVEApi:
     def __init__(self, host, username, password, https=False, verify_ssl=False):
@@ -25,16 +27,30 @@ class EVEApi:
         return data
 
     def login(self):
+        # EVE-NG Community expects the web/API account (commonly admin), not
+        # the Linux SSH account (commonly root). EVE-NG Pro additionally
+        # documents html5=0 for API login.
+        payload = {"username": self.username, "password": self.password}
+        if self.base.startswith("https://"):
+            payload["html5"] = "0"
+
+        # Send a raw JSON body to match EVE-NG's documented curl examples.
         response = self.session.post(
             self.base + "/api/auth/login",
-            json={"username": self.username, "password": self.password},
+            data=json.dumps(payload),
             timeout=15,
         )
-        if not response.ok:
-            raise RuntimeError(f"EVE API login failed: HTTP {response.status_code}")
-        data = response.json()
-        if data.get("status") != "success":
-            raise RuntimeError(str(data))
+        try:
+            data = response.json()
+        except Exception:
+            data = {"status": "error", "message": response.text.strip()}
+
+        if not response.ok or data.get("status") != "success":
+            detail = data.get("message") or response.text.strip() or "No response body"
+            raise RuntimeError(
+                f"EVE API login failed: HTTP {response.status_code}: {detail}. "
+                "Use the EVE-NG Web/API account (typically admin), not the SSH root account."
+            )
         return data
 
     def create_folder(self, parent, name):
