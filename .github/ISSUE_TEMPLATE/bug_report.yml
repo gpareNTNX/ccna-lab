@@ -1,0 +1,19 @@
+name: Bug report
+description: Report a reproducible problem
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: EVE-NG edition/version
+  - type: input
+    attributes:
+      label: Python version
+  - type: textarea
+    attributes:
+      label: Log output

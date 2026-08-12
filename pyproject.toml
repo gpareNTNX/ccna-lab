@@ -1,0 +1,20 @@
+[project]
+name = "ccna-eve-lab-builder"
+version = "4.1.0"
+description = "GUI lab builder and validator for CCNA 200-301 practice on EVE-NG"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Project contributors"}]
+dependencies = [
+  "requests>=2.32.0,<3",
+  "paramiko>=3.5.0,<4",
+  "scp>=0.15.0,<1"
+]
+
+[project.scripts]
+ccna-lab-builder = "ccna_lab_builder.app:main"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+exclude = ["generated"]
