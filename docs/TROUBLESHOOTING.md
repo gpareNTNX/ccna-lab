@@ -3,9 +3,9 @@
 ## API login fails
 
 - Verify the EVE web UI is reachable.
+- Use the EVE-NG Web/API account, not the Linux SSH account.
 - Check Community vs Pro protocol.
-- Try HTTP for Community or HTTPS for Pro as appropriate.
-- Confirm the account is not simultaneously used by another API/browser session if session behavior causes a conflict.
+- Use HTTP for Community or HTTPS for Pro as appropriate.
 
 ## SSH works but API login fails
 
@@ -32,6 +32,31 @@ curl -k -s -c /tmp/eve-cookie -b /tmp/eve-cookie -X POST \
 ```
 
 A successful response has `status: success`.
+
+## API returns 412 / session timed out (90001)
+
+EVE-NG allows only one active Web/API session per user. Logging into the same EVE-NG user from another browser or location invalidates the previous session.
+
+Typical error:
+
+```text
+EVE API POST /labs: HTTP 412:
+User is not authenticated or session timed out (90001)
+```
+
+The application now automatically re-authenticates once and retries the failed request. If a browser repeatedly logs in with the same user, however, the browser and the application can continue invalidating each other's sessions.
+
+Recommended setup:
+
+```text
+SSH / CLI
+  Username: root (or another SSH-capable account)
+
+EVE Web / API
+  Username: a dedicated EVE-NG API user
+```
+
+If you use `admin` for the application, avoid simultaneously logging into the EVE-NG Web UI with the same `admin` account while the application is creating or managing labs.
 
 ## SSH works but image install fails
 
