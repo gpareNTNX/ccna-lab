@@ -28,30 +28,6 @@ These packages contain the desktop application only.
 
 ## From source: macOS / Linux
 
-### macOS with Homebrew Python
-
-Homebrew packages Tkinter separately from Python. If you use a Homebrew Python installation, install the Tkinter formula matching the interpreter's major/minor version before launching the GUI.
-
-For Python 3.14:
-
-```bash
-brew install python-tk@3.14
-```
-
-Verify Tkinter:
-
-```bash
-python3 -m tkinter
-```
-
-A small Tk window should open. You can also verify it without opening the application:
-
-```bash
-python3 -c 'import tkinter; print(tkinter.TkVersion)'
-```
-
-Then install and run from source:
-
 ```bash
 git clone https://github.com/gpareNTNX/ccna-lab.git
 cd ccna-lab
@@ -67,51 +43,34 @@ Or on macOS:
 ./scripts/run_mac.sh
 ```
 
-The helper script now checks Tkinter before creating/using the virtual environment. If Tkinter is missing from a Homebrew Python installation, it prints the exact `brew install python-tk@<major.minor>` command for that interpreter.
+### Homebrew Python and Tkinter
 
-### macOS error: `No module named '_tkinter'`
-
-If you see:
-
-```text
-ModuleNotFoundError: No module named '_tkinter'
-```
-
-and your interpreter is Python 3.14, run:
+Homebrew may install Tkinter separately from Python. If the launcher reports that Tkinter is missing, install the matching formula, for example:
 
 ```bash
 brew install python-tk@3.14
 python3 -m tkinter
 ```
 
-If `.venv` already exists, reactivate it and retry:
-
-```bash
-source .venv/bin/activate
-python -m ccna_lab_builder.app
-```
-
-### Linux
-
-```bash
-./scripts/run_linux.sh
-```
-
-On Debian/Ubuntu, if Tkinter is missing:
-
-```bash
-sudo apt update
-sudo apt install python3-tk
-```
+Then recreate `.venv` or rerun `./scripts/run_mac.sh`.
 
 ## First connection
 
-In the **EVE-NG** tab, enter the connection information for the existing server:
+In the **EVE-NG** tab, enter the connection information for the existing server.
 
-- Host: existing EVE-NG IP/FQDN
-- Username: EVE/SSH user
-- Password: entered only in memory
+### SSH / CLI credentials
+
+- SSH username: commonly `root`
+- SSH password: the Linux/CLI password for EVE-NG
 - SSH port: normally 22
-- HTTPS: enable for EVE-NG Pro when appropriate
 
-The application intentionally does **not** save your password.
+### EVE Web / API credentials
+
+- API username: commonly `admin`, or the user you use in the EVE-NG web UI
+- API password: the corresponding EVE web password
+- Community: normally HTTP
+- Pro: HTTPS; the application includes `html5=0` during API login
+
+SSH/CLI and Web/API credentials are separate on a standard EVE-NG installation. Do not use the Linux `root` account as the API account unless you explicitly created a matching EVE web user.
+
+The application intentionally does **not** save either password.
