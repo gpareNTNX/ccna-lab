@@ -1,8 +1,19 @@
-# EVE-NG integration
+# Integration with an existing EVE-NG server
 
-## Image directories
+## Scope
 
-V4 uploads QEMU images under:
+This project is an **EVE-NG client/integration tool**, not an EVE-NG deployment tool.
+
+EVE-NG must already be installed, licensed/configured as appropriate, reachable, and operational before you use CCNA EVE Lab Builder. The application does not create the EVE-NG VM, install EVE-NG Community/Pro, configure the hypervisor, or enable nested virtualization.
+
+The application connects to the existing server using:
+
+1. the EVE-NG API for lab lifecycle and inventory;
+2. SSH/SCP for Cisco image import and console tunneling.
+
+## Cisco image import
+
+When you explicitly select an IOSv/IOSvL2 image, the application can upload that image **to the existing EVE-NG server** under:
 
 ```text
 /opt/unetlab/addons/qemu/
@@ -20,17 +31,19 @@ IOSvL2 folders start with:
 viosl2-
 ```
 
-The QEMU disk is installed as:
+The QEMU disk is placed as:
 
 ```text
 virtioa.qcow2
 ```
 
-The installer then runs:
+After image import, the application runs on the existing server:
 
 ```bash
 /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
 ```
+
+This operation imports lab images only; it does not install or redeploy EVE-NG itself.
 
 ## Master topology
 
@@ -46,11 +59,11 @@ R1-EDGE ---- R2-HQ ---- R3-HQ
    +------------------- R4-BRANCH
 ```
 
-The exact drawing in EVE-NG is positioned by percentages.
+The topology is created inside the existing EVE-NG environment.
 
 ## Stable API operations used
 
-V4 uses documented API operations for:
+The application uses EVE-NG operations for:
 
 - authentication
 - create lab
@@ -70,7 +83,7 @@ The public EVE-NG API documentation describes how to inspect interfaces and topo
 
 Therefore:
 
-- **off**: node creation is stable; cable in the EVE UI.
+- **off**: node creation is stable; cable in the existing EVE-NG UI.
 - **on**: V4 attempts the commonly used interface assignment request and verifies interface names first.
 
-If the experimental method fails, disable it and cable the topology manually.
+If the experimental method fails, disable it and cable the topology manually in EVE-NG.

@@ -1,7 +1,12 @@
 CCNA EVE Lab Builder
 
-This application does not include Cisco IOSv/IOSvL2 images.
+This installer installs the CCNA EVE Lab Builder desktop application only.
+It does NOT install, deploy or provision EVE-NG.
+
+An existing, reachable EVE-NG server is required to use the lab-management features.
+The application connects to that server using the EVE API and SSH.
+
+Cisco IOSv/IOSvL2 images are not included.
 You must supply images you are legally entitled to use.
 
-The application connects to your EVE-NG server using the EVE API and SSH.
 The EVE-NG password is not persisted by the application.

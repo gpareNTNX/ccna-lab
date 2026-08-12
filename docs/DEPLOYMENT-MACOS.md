@@ -1,4 +1,10 @@
-# macOS deployment
+# macOS desktop application deployment
+
+This package installs **CCNA EVE Lab Builder on macOS**. It does not install or package EVE-NG.
+
+## Runtime assumption
+
+An EVE-NG server is already deployed and reachable from the Mac. After the application is installed, it connects to that existing server through the EVE API and SSH.
 
 ## Final artifacts
 
@@ -15,7 +21,7 @@ Use `arm64` for Apple Silicon and `x86_64` for Intel.
 ./deploy/macos/build-all.sh
 ```
 
-This creates the `.app` with PyInstaller and the `.dmg` with Apple's built-in `hdiutil`.
+This creates the desktop `.app` with PyInstaller and the `.dmg` with Apple's built-in `hdiutil`. No EVE-NG VM or server component is copied into the DMG.
 
 ## Developer ID signing
 
@@ -50,6 +56,4 @@ APPLE_TEAM_ID
 APPLE_APP_PASSWORD
 ```
 
-`APPLE_CERTIFICATE_BASE64` is the Base64 representation of your exported Developer ID `.p12`. The certificate is imported into a temporary CI keychain and is not stored in the repository.
-
-If these secrets are absent, the workflow still builds unsigned test DMGs.
+If these secrets are absent, the workflow still builds unsigned test DMGs of the desktop application.

@@ -27,7 +27,7 @@ class MainWindow(ttk.Frame):
 
     def _build(self):
         ttk.Label(self, text="CCNA 200-301 EVE-NG LAB BUILDER", font=("Helvetica", 22, "bold")).pack(pady=(15, 2))
-        ttk.Label(self, text="V4 • EVE-NG deployment • Scenario engine • Live validation").pack(pady=(0, 10))
+        ttk.Label(self, text="V4.1 • Existing EVE-NG integration • Scenario engine • Live validation").pack(pady=(0, 10))
         self.nb = ttk.Notebook(self)
         self.nb.pack(fill="both", expand=True, padx=18, pady=8)
 
@@ -80,14 +80,22 @@ class MainWindow(ttk.Frame):
 
     def _connection_tab(self):
         f = ttk.Frame(self.t_conn, padding=30); f.pack(fill="both", expand=True)
+        ttk.Label(
+            f,
+            text=(
+                "Connect this desktop application to an existing EVE-NG server. "
+                "EVE-NG itself is not installed or deployed by this application."
+            ),
+            wraplength=760,
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 14))
         eve = self.settings.data["eve"]
-        self.host = self.field(f, "EVE-NG Host", 0, eve["host"])
-        self.user = self.field(f, "Username", 1, eve["username"])
-        self.password = self.field(f, "Password", 2, "", True)
-        self.ssh_port = self.field(f, "SSH Port", 3, eve["ssh_port"])
+        self.host = self.field(f, "EVE-NG Host", 1, eve["host"])
+        self.user = self.field(f, "Username", 2, eve["username"])
+        self.password = self.field(f, "Password", 3, "", True)
+        self.ssh_port = self.field(f, "SSH Port", 4, eve["ssh_port"])
         self.https = tk.BooleanVar(value=eve["https"])
-        ttk.Checkbutton(f, text="Use HTTPS API (EVE-NG Pro)", variable=self.https).grid(row=4, column=1, sticky="w")
-        ttk.Button(f, text="TEST SSH + API", command=lambda: self.bg(self.test_connection)).grid(row=5, column=1, sticky="e", pady=18)
+        ttk.Checkbutton(f, text="Use HTTPS API (EVE-NG Pro)", variable=self.https).grid(row=5, column=1, sticky="w")
+        ttk.Button(f, text="TEST SSH + API", command=lambda: self.bg(self.test_connection)).grid(row=6, column=1, sticky="e", pady=18)
 
     def test_connection(self):
         host = self.host.get().strip()

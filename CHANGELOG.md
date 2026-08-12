@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Clarified that EVE-NG is a pre-existing external server and is not deployed by this project
+- Renamed the GUI subtitle from `EVE-NG deployment` to `Existing EVE-NG integration`
+- Clarified that Windows/macOS packages contain only the desktop client application
+- Separated end-user requirements from build-machine requirements
+- Clarified that IOS image import targets the existing EVE-NG server
+
 ## 4.1.0 — 2026-08-12
 
 - Added Windows x64 PyInstaller deployment

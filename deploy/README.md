@@ -1,14 +1,18 @@
-# Deployment package
+# Desktop application deployment package
 
-This directory contains everything needed to produce installable builds of the application.
+This directory builds installable packages for **CCNA EVE Lab Builder only**.
+
+> EVE-NG is an existing external server dependency. Nothing in this directory installs, provisions, packages or deploys EVE-NG.
 
 ## Outputs
 
-| Platform | Architecture | Output |
+| Client platform | Architecture | Output |
 |---|---|---|
-| Windows | x64 | Portable application folder + Inno Setup `.exe` installer |
+| Windows | x64 | Portable application folder/ZIP + Inno Setup `.exe` installer |
 | macOS | Apple Silicon / arm64 | `.app` + `.dmg` |
 | macOS | Intel / x86_64 | `.app` + `.dmg` |
+
+The installed desktop application connects to the pre-existing EVE-NG server through API + SSH.
 
 PyInstaller is not a cross-compiler. Build each target on its corresponding operating system. The included GitHub Actions workflow does this automatically.
 
@@ -30,11 +34,4 @@ chmod +x deploy/macos/*.sh
 
 ## Automated GitHub builds
 
-Run **Build Installers** manually from GitHub Actions, or create a version tag:
-
-```bash
-git tag v4.1.0
-git push origin v4.1.0
-```
-
-A tag build creates a GitHub Release containing Windows x64, macOS Apple Silicon, and macOS Intel packages.
+Run **Build Installers** manually from GitHub Actions, or create a version tag. The resulting release contains client application packages only.

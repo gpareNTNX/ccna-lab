@@ -1,4 +1,6 @@
-# Windows deployment
+# Windows desktop application packaging
+
+This directory packages **CCNA EVE Lab Builder for Windows**. It does not package or install EVE-NG.
 
 The release artifact is:
 
@@ -6,9 +8,9 @@ The release artifact is:
 CCNA-EVE-Lab-Builder-Windows-x64-<version>-Setup.exe
 ```
 
-The installer provides Start Menu integration, optional Desktop shortcut, uninstall support, and optional post-install launch.
+The installer provides Start Menu integration, optional Desktop shortcut, uninstall support, and optional post-install launch. After launch, the application connects to an existing EVE-NG server.
 
-## Prerequisites
+## Build-machine prerequisites
 
 - Windows 10/11 x64
 - Python 3.10+
@@ -19,18 +21,6 @@ The installer provides Start Menu integration, optional Desktop shortcut, uninst
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\deploy\windows\build-all.ps1
-```
-
-Portable build only:
-
-```powershell
-.\deploy\windows\build-portable.ps1
-```
-
-Installer only:
-
-```powershell
-.\deploy\windows\build-installer.ps1
 ```
 
 For public enterprise distribution, Authenticode-sign the final installer with your organization's certificate. Never commit a private signing key.
