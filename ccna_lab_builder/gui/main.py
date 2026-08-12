@@ -11,6 +11,7 @@ from ccna_lab_builder.core.scenarios import ScenarioCatalog
 from ccna_lab_builder.core.live_validation import LiveValidator
 from ccna_lab_builder.core.validator import Validator
 
+
 class MainWindow(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -84,33 +85,66 @@ class MainWindow(ttk.Frame):
             f,
             text=(
                 "Connect this desktop application to an existing EVE-NG server. "
-                "EVE-NG itself is not installed or deployed by this application."
+                "SSH/CLI and Web/API credentials are separate on a standard EVE-NG installation."
             ),
-            wraplength=760,
+            wraplength=800,
         ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 14))
         eve = self.settings.data["eve"]
         self.host = self.field(f, "EVE-NG Host", 1, eve["host"])
-        self.user = self.field(f, "Username", 2, eve["username"])
-        self.password = self.field(f, "Password", 3, "", True)
-        self.ssh_port = self.field(f, "SSH Port", 4, eve["ssh_port"])
+
+        ttk.Label(f, text="SSH / CLI", font=("Helvetica", 12, "bold")).grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(12, 2)
+        )
+        self.ssh_user = self.field(f, "SSH Username", 3, eve.get("ssh_username", "root"))
+        self.ssh_password = self.field(f, "SSH Password", 4, "", True)
+        self.ssh_port = self.field(f, "SSH Port", 5, eve["ssh_port"])
+
+        ttk.Label(f, text="EVE Web / API", font=("Helvetica", 12, "bold")).grid(
+            row=6, column=0, columnspan=2, sticky="w", pady=(16, 2)
+        )
+        self.api_user = self.field(f, "API Username", 7, eve.get("api_username", "admin"))
+        self.api_password = self.field(f, "API Password", 8, "", True)
         self.https = tk.BooleanVar(value=eve["https"])
-        ttk.Checkbutton(f, text="Use HTTPS API (EVE-NG Pro)", variable=self.https).grid(row=5, column=1, sticky="w")
-        ttk.Button(f, text="TEST SSH + API", command=lambda: self.bg(self.test_connection)).grid(row=6, column=1, sticky="e", pady=18)
+        ttk.Checkbutton(
+            f, text="Use HTTPS API (EVE-NG Pro)", variable=self.https
+        ).grid(row=9, column=1, sticky="w")
+        ttk.Label(
+            f,
+            text="Community: normally HTTP. Pro: HTTPS and html5=0 are used for API login.",
+        ).grid(row=10, column=1, sticky="w", pady=(4, 0))
+        ttk.Button(
+            f, text="TEST SSH + API", command=lambda: self.bg(self.test_connection)
+        ).grid(row=11, column=1, sticky="e", pady=18)
 
     def test_connection(self):
         host = self.host.get().strip()
         if not host:
             raise ValueError("Enter the EVE-NG host.")
+        if not self.ssh_user.get().strip():
+            raise ValueError("Enter the SSH username.")
+        if not self.api_user.get().strip():
+            raise ValueError("Enter the EVE Web/API username.")
+
         self.log("Connecting via SSH...")
-        self.ssh = SSHConnection(host, self.user.get(), self.password.get(), self.ssh_port.get())
+        self.ssh = SSHConnection(
+            host, self.ssh_user.get().strip(), self.ssh_password.get(), self.ssh_port.get()
+        )
         hostname = self.ssh.connect()
         self.log(f"SSH OK: {hostname}")
-        self.api = EVEApi(host, self.user.get(), self.password.get(), https=self.https.get())
+
+        self.log("Connecting to EVE-NG Web/API...")
+        self.api = EVEApi(
+            host, self.api_user.get().strip(), self.api_password.get(), https=self.https.get()
+        )
         self.api.login()
         self.log("EVE-NG API OK.")
+
         self.settings.data["eve"].update({
-            "host": host, "ssh_port": int(self.ssh_port.get()),
-            "username": self.user.get(), "https": self.https.get()
+            "host": host,
+            "ssh_port": int(self.ssh_port.get()),
+            "ssh_username": self.ssh_user.get().strip(),
+            "api_username": self.api_user.get().strip(),
+            "https": self.https.get(),
         })
         self.settings.save()
         self.after(0, lambda: messagebox.showinfo("EVE-NG", "SSH + API connection successful."))
