@@ -21,6 +21,7 @@ class FakeAPI:
                     "name": "R1-EDGE",
                     "console": "telnet",
                     "url": "telnet://127.0.0.1:32769",
+                    "uuid": "11111111-1111-1111-1111-111111111111",
                 }
             }
         }
@@ -40,6 +41,7 @@ class DelayedAPI(FakeAPI):
                     "name": "R1-EDGE",
                     "console": "telnet",
                     "url": url,
+                    "uuid": "11111111-1111-1111-1111-111111111111",
                 }
             }
         }
@@ -61,9 +63,35 @@ class HTML5ThenNativeAPI(FakeAPI):
                     "name": "R1-EDGE",
                     "console": "telnet",
                     "url": url,
+                    "uuid": "11111111-1111-1111-1111-111111111111",
                 }
             }
         }
+
+
+class PersistentHTML5API(FakeAPI):
+    def nodes(self, _lab):
+        self.nodes_calls += 1
+        return {
+            "data": {
+                "1": {
+                    "name": "R1-EDGE",
+                    "console": "telnet",
+                    "url": "/html5/#/client/MzI3NjkAYwBteXNxbA==?token=ABC",
+                    "uuid": "22222222-2222-2222-2222-222222222222",
+                }
+            }
+        }
+
+
+class FakeSSH:
+    def __init__(self, backend):
+        self.backend = backend
+        self.uuids = []
+
+    def discover_qemu_console(self, uuid):
+        self.uuids.append(uuid)
+        return dict(self.backend)
 
 
 class LiveValidationConsoleTests(unittest.TestCase):
@@ -112,6 +140,46 @@ class LiveValidationConsoleTests(unittest.TestCase):
 
         self.assertEqual(endpoint, ("127.0.0.1", 32771))
         self.assertEqual(api.login_calls, 1)
+
+    def test_html5_session_uses_qemu_tcp_backend_when_available(self):
+        api = PersistentHTML5API()
+        ssh = FakeSSH(
+            {
+                "kind": "tcp",
+                "host": "127.0.0.1",
+                "port": 40001,
+                "source": "qemu-process",
+            }
+        )
+        validator = LiveValidator(api, ssh=ssh)
+        initial = api.nodes("/lab.unl")["data"]["1"]
+
+        backend = validator._console_backend(
+            "/lab.unl", 1, node_info=initial, attempts=1, delay=0
+        )
+
+        self.assertEqual(backend["port"], 40001)
+        self.assertEqual(ssh.uuids, ["22222222-2222-2222-2222-222222222222"])
+        self.assertEqual(api.login_calls, 0)
+
+    def test_html5_session_can_use_qemu_unix_backend(self):
+        api = PersistentHTML5API()
+        ssh = FakeSSH(
+            {
+                "kind": "unix",
+                "path": "/tmp/eve-console.sock",
+                "source": "qemu-process",
+            }
+        )
+        validator = LiveValidator(api, ssh=ssh)
+        initial = api.nodes("/lab.unl")["data"]["1"]
+
+        backend = validator._console_backend(
+            "/lab.unl", 1, node_info=initial, attempts=1, delay=0
+        )
+
+        self.assertEqual(backend["kind"], "unix")
+        self.assertEqual(backend["path"], "/tmp/eve-console.sock")
 
 
 if __name__ == "__main__":
