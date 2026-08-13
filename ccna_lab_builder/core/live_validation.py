@@ -1,4 +1,4 @@
-import re
+import shlex
 import time
 from urllib.parse import urlparse
 
@@ -12,51 +12,20 @@ class LiveValidator:
         self.ssh = ssh
         self.log = log
         self.validator = Validator()
+        self._active_lab_uuid = "unknown"
+        self._runtime_note = ""
 
     def _node_map(self, lab):
         data = self.api.nodes(lab).get("data", {})
         return {v["name"]: (int(k), v) for k, v in data.items()}
 
     @staticmethod
-    def _scenario_lab_name(scenario):
-        slug = re.sub(r"[^A-Z0-9._-]+", "-", scenario["name"].upper()).strip("-")
-        return f"CCNA-{scenario['id']}-{slug}.unl"
-
-    def _resolve_lab(self, requested_lab, scenario):
-        """Prefer the deterministic scenario lab over the Master Lab when it exists."""
-        requested = str(requested_lab or "").strip()
-        folder = requested.rsplit("/", 1)[0] if "/" in requested else ""
-        scenario_name = self._scenario_lab_name(scenario)
-        candidate = (folder.rstrip("/") + "/" + scenario_name) if folder else "/" + scenario_name
-
-        current_name = requested.rsplit("/", 1)[-1]
-        expected_prefix = f"CCNA-{scenario['id']}-"
-        if current_name.startswith(expected_prefix):
-            return requested
-
-        try:
-            self.api.get_lab(candidate)
-        except RuntimeError:
-            self.log(
-                f"Validator target remains {requested}: scenario lab {candidate} was not found."
-            )
-            return requested
-
-        self.log(
-            f"Validator target adjusted from {requested} to scenario lab {candidate}."
-        )
-        return candidate
-
-    @staticmethod
     def _native_backend_from_url(url):
-        """Return a TCP backend only for a real native console URL."""
         if not isinstance(url, str):
             return None
-
         value = url.strip()
         if not value or "/html5/" in value or "/client/" in value:
             return None
-
         parsed = urlparse(value)
         if parsed.scheme not in {"telnet", "tcp"} or not parsed.hostname or not parsed.port:
             return None
@@ -71,7 +40,6 @@ class LiveValidator:
 
     @staticmethod
     def _native_endpoint_from_url(url):
-        """Backward-compatible helper retained for existing tests/callers."""
         backend = LiveValidator._native_backend_from_url(url)
         if not backend:
             return None
@@ -81,7 +49,80 @@ class LiveValidator:
     def _is_html5_url(url):
         return isinstance(url, str) and ("/html5/" in url or "/client/" in url)
 
+    def _runtime_backend(self, node_id):
+        """Resolve QEMU by EVE's exact POD/LAB_UUID/NODE_ID runtime directory."""
+        if not self.ssh:
+            return None
+        lab_uuid = str(self._active_lab_uuid or "").strip()
+        if not lab_uuid or lab_uuid == "unknown":
+            return None
+
+        suffix = f"/{lab_uuid}/{int(node_id)}"
+        script = (
+            "target_suffix="
+            + shlex.quote(suffix)
+            + "; "
+            + "for pid in $(pgrep -f 'qemu-system|qemu-kvm' 2>/dev/null); do "
+            + 'cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null || true); '
+            + 'case "$cwd" in /opt/unetlab/tmp/*"$target_suffix") '
+            + 'printf "__PID__=%s\\n" "$pid"; '
+            + 'printf "__CWD__=%s\\n" "$cwd"; '
+            + 'tr "\\000" " " < "/proc/$pid/cmdline" 2>/dev/null; '
+            + 'printf "\\n"; exit 0;; esac; done'
+        )
+        out, err = self.ssh.exec(script)
+        lines = [line for line in out.splitlines() if line.strip()]
+        if not lines:
+            self._runtime_note = (
+                f"No QEMU process cwd matched /opt/unetlab/tmp/*{suffix}. "
+                f"stderr={err.strip() or 'none'}"
+            )
+            return None
+
+        pid = ""
+        runtime_dir = ""
+        command_lines = []
+        for line in lines:
+            if line.startswith("__PID__="):
+                pid = line.split("=", 1)[1].strip()
+            elif line.startswith("__CWD__="):
+                runtime_dir = line.split("=", 1)[1].strip()
+            else:
+                command_lines.append(line)
+
+        qemu_command = " ".join(command_lines).strip()
+        backend = self.ssh.parse_qemu_console_backend(qemu_command)
+        if not backend:
+            sample = qemu_command[:700] if qemu_command else "<empty qemu command>"
+            self._runtime_note = (
+                f"Matched runtime {runtime_dir or suffix} pid={pid or 'unknown'}, "
+                f"but no supported serial backend was parsed. QEMU: {sample}"
+            )
+            return None
+
+        backend.update(
+            {
+                "source": "eve-runtime",
+                "lab_uuid": lab_uuid,
+                "node_id": int(node_id),
+                "pid": pid or "unknown",
+                "runtime_dir": runtime_dir or f"/opt/unetlab/tmp/*{suffix}",
+            }
+        )
+        self._runtime_note = ""
+        label = (
+            f"{backend['host']}:{backend['port']}"
+            if backend["kind"] == "tcp"
+            else backend["path"]
+        )
+        self.log(
+            f"EVE runtime console matched lab_uuid={lab_uuid}, node_id={node_id}, "
+            f"pid={backend['pid']}: {label}"
+        )
+        return backend
+
     def _qemu_backend(self, node_info):
+        """Secondary fallback when a build puts the node UUID in QEMU args."""
         if not self.ssh or not isinstance(node_info, dict):
             return None
         uuid = node_info.get("uuid")
@@ -89,57 +130,52 @@ class LiveValidator:
             return None
         backend = self.ssh.discover_qemu_console(uuid)
         if backend:
-            if backend["kind"] == "tcp":
-                self.log(
-                    f"QEMU console discovered for {node_info.get('name', uuid)}: "
-                    f"{backend['host']}:{backend['port']}"
-                )
-            else:
-                self.log(
-                    f"QEMU UNIX console discovered for {node_info.get('name', uuid)}: "
-                    f"{backend['path']}"
-                )
+            backend["source"] = "qemu-node-uuid"
         return backend
 
-    def _api_tcp_backend_if_live(self, node_info):
+    def _api_backend_diagnostic(self, node_info):
         backend = self._native_backend_from_url(node_info.get("url"))
-        if not backend:
-            return None
-
-        if not self.ssh:
-            return backend
-
+        if not backend or not self.ssh:
+            return
         listeners = self.ssh.console_listener_info(backend["port"])
         if listeners:
-            return backend
-
-        self.log(
-            f"Ignoring stale EVE API console URL {backend['host']}:{backend['port']}: "
-            "no TCP listener exists on the EVE-NG server."
-        )
-        return None
+            self.log(
+                f"EVE API advertises {backend['host']}:{backend['port']} and a listener exists, "
+                "but it will not be used without a matching EVE runtime process."
+            )
+        else:
+            self.log(
+                f"Ignoring stale EVE API console URL {backend['host']}:{backend['port']}: "
+                "no TCP listener exists on the EVE-NG server."
+            )
 
     def _console_backend(self, lab, node_id, node_info=None, attempts=15, delay=1.0):
-        """Resolve a usable backend and start the node when necessary."""
         candidate = node_info or {}
         native_session_refreshed = False
         start_attempted = False
         start_error = None
 
         for attempt in range(1, attempts + 1):
-            qemu_backend = self._qemu_backend(candidate)
-            if qemu_backend:
-                return qemu_backend
+            runtime = self._runtime_backend(node_id)
+            if runtime:
+                return runtime
 
-            api_backend = self._api_tcp_backend_if_live(candidate)
-            if api_backend:
-                return api_backend
+            qemu = self._qemu_backend(candidate)
+            if qemu:
+                return qemu
+
+            if not self.ssh:
+                api_backend = self._native_backend_from_url(candidate.get("url"))
+                if api_backend:
+                    return api_backend
+            else:
+                self._api_backend_diagnostic(candidate)
 
             if not start_attempted:
                 try:
                     self.log(
-                        f"Node {node_id}: no running console backend found; "
-                        "starting the scenario node via EVE-NG API..."
+                        f"Node {node_id}: no exact runtime console found; "
+                        "starting the selected lab node via EVE-NG API..."
                     )
                     self.api.start_node(lab, node_id)
                     self.log(f"Node {node_id}: EVE-NG start request accepted.")
@@ -147,41 +183,55 @@ class LiveValidator:
                     start_error = str(exc)
                     self.log(
                         f"Node {node_id}: start request returned: {start_error}. "
-                        "Continuing discovery in case the node is already starting."
+                        "Continuing exact runtime discovery."
                     )
                 start_attempted = True
 
-            if self._is_html5_url(candidate.get("url")) and not native_session_refreshed:
+            if (
+                not self.ssh
+                and self._is_html5_url(candidate.get("url"))
+                and not native_session_refreshed
+            ):
                 self.api.login()
                 native_session_refreshed = True
 
             nodes = self.api.nodes(lab).get("data", {})
             candidate = nodes.get(str(node_id), candidate)
 
-            qemu_backend = self._qemu_backend(candidate)
-            if qemu_backend:
-                return qemu_backend
+            runtime = self._runtime_backend(node_id)
+            if runtime:
+                return runtime
 
-            api_backend = self._api_tcp_backend_if_live(candidate)
-            if api_backend:
-                return api_backend
+            qemu = self._qemu_backend(candidate)
+            if qemu:
+                return qemu
+
+            if not self.ssh:
+                api_backend = self._native_backend_from_url(candidate.get("url"))
+                if api_backend:
+                    return api_backend
 
             detail = self.api.node(lab, node_id).get("data", {})
             if detail:
                 candidate = {**candidate, **detail}
 
-            qemu_backend = self._qemu_backend(candidate)
-            if qemu_backend:
-                return qemu_backend
+            runtime = self._runtime_backend(node_id)
+            if runtime:
+                return runtime
 
-            api_backend = self._api_tcp_backend_if_live(candidate)
-            if api_backend:
-                return api_backend
+            qemu = self._qemu_backend(candidate)
+            if qemu:
+                return qemu
+
+            if not self.ssh:
+                api_backend = self._native_backend_from_url(candidate.get("url"))
+                if api_backend:
+                    return api_backend
 
             if attempt < attempts:
                 if attempt == 1:
                     self.log(
-                        f"Node {node_id}: waiting for EVE-NG/QEMU to create the console backend..."
+                        f"Node {node_id}: waiting for the exact EVE runtime/QEMU console..."
                     )
                 time.sleep(delay)
 
@@ -190,15 +240,19 @@ class LiveValidator:
         url = candidate.get("url") or "none"
         uuid = candidate.get("uuid") or "none"
         extra = f" Start result: {start_error}" if start_error else ""
+        runtime_note = (
+            f" Runtime diagnostic: {self._runtime_note}" if self._runtime_note else ""
+        )
         raise RuntimeError(
-            f"No usable console backend available for node {node_id} after {attempts} attempts. "
-            f"EVE status={status}, console={console}, uuid={uuid}, url={url}. "
-            "No matching QEMU serial backend or live native TCP listener was found."
+            f"No exact console backend available for node {node_id} after {attempts} attempts. "
+            f"lab_uuid={self._active_lab_uuid}, EVE status={status}, console={console}, "
+            f"node_uuid={uuid}, api_url={url}. "
+            "The validator refused to use an unverified EVE API console port."
+            + runtime_note
             + extra
         )
 
     def _console_endpoint(self, lab, node_id, node_info=None, attempts=15, delay=1.0):
-        """Backward-compatible native TCP endpoint helper."""
         backend = self._console_backend(
             lab, node_id, node_info=node_info, attempts=attempts, delay=delay
         )
@@ -230,16 +284,19 @@ class LiveValidator:
             console.bootstrap()
             prompt = console.ensure_privileged(timeout=5.0)
             self.log(
-                f"{check['node']}: lab={lab}, node_id={node_id}, "
-                f"uuid={node_info.get('uuid', 'unknown')}, prompt={prompt}"
+                f"{check['node']}: lab={lab}, lab_uuid={self._active_lab_uuid}, "
+                f"node_id={node_id}, uuid={node_info.get('uuid', 'unknown')}, prompt={prompt}"
             )
             console.command("terminal length 0", timeout=5.0)
             output = console.command(check["command"], timeout=8.0)
             result = self.validator.validate_output(check, output)
             context = (
-                f"[Validator target] lab={lab}; node_id={node_id}; "
-                f"uuid={node_info.get('uuid', 'unknown')}; prompt={prompt}; "
-                f"backend={backend_label} ({backend.get('source', 'unknown')})"
+                f"[Validator target] lab={lab}; lab_uuid={self._active_lab_uuid}; "
+                f"node_id={node_id}; uuid={node_info.get('uuid', 'unknown')}; "
+                f"prompt={prompt}; backend={backend_label} "
+                f"({backend.get('source', 'unknown')}); "
+                f"pid={backend.get('pid', 'n/a')}; "
+                f"runtime={backend.get('runtime_dir', 'n/a')}"
             )
             result.output = context + ("\n" + result.output if result.output else "")
             if result.passed:
@@ -254,10 +311,19 @@ class LiveValidator:
             channel.close()
 
     def validate(self, lab, scenario):
-        resolved_lab = self._resolve_lab(lab, scenario)
-        self.log(f"Validation target: {resolved_lab}")
+        target_lab = str(lab or "").strip()
+        if not target_lab:
+            raise RuntimeError("Select an EVE-NG lab to validate.")
+
+        lab_data = self.api.get_lab(target_lab).get("data", {})
+        self._active_lab_uuid = str(lab_data.get("id") or "unknown")
+        self.log(
+            f"Validation target (exact): {target_lab}; "
+            f"lab_uuid={self._active_lab_uuid}"
+        )
+
         results = []
         for check in scenario.get("checks", []):
             self.log(f"{check['node']}: {check['command']}")
-            results.append(self.run_check(resolved_lab, check))
+            results.append(self.run_check(target_lab, check))
         return results

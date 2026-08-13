@@ -7,7 +7,7 @@ from ccna_lab_builder.gui.main import MainWindow
 
 
 class SafeMainWindow(MainWindow):
-    """Main window with thread-safe Tkinter error reporting and safer lab selection."""
+    """Main window with thread-safe errors and explicit validation targets."""
 
     def _safe_run(self, func):
         try:
@@ -27,6 +27,29 @@ class SafeMainWindow(MainWindow):
         slug = re.sub(r"[^A-Z0-9]+", "-", scenario["name"].upper()).strip("-")
         return f"CCNA-{scenario['id']}-{slug}"
 
+    def _scenario_lab_path(self, scenario):
+        folder = self.folder.get().strip() or "/"
+        if not folder.startswith("/"):
+            folder = "/" + folder
+        prefix = folder.rstrip("/")
+        return f"{prefix}/{self._scenario_lab_name(scenario)}.unl"
+
+    def _set_validation_target(self, lab):
+        def update():
+            self.validation_lab.delete(0, "end")
+            self.validation_lab.insert(0, lab)
+
+        self.after(0, update)
+
+    def select_scenario(self, event=None):
+        """Select a scenario and make its exact lab path visible in Validator."""
+        super().select_scenario(event)
+        if not self.current_scenario:
+            return
+        lab = self._scenario_lab_path(self.current_scenario)
+        self._set_validation_target(lab)
+        self.log("Validator target selected explicitly: " + lab)
+
     def create_scenario_lab(self):
         if not self.current_scenario:
             raise RuntimeError("Select a scenario first.")
@@ -45,12 +68,7 @@ class SafeMainWindow(MainWindow):
         )
         self.log("Scenario lab created: " + lab)
         self.log("Validator target updated to: " + lab)
-
-        def select_validation_lab():
-            self.validation_lab.delete(0, "end")
-            self.validation_lab.insert(0, lab)
-
-        self.after(0, select_validation_lab)
+        self._set_validation_target(lab)
 
 
 def main():

@@ -1,6 +1,7 @@
 import unittest
 
 from ccna_lab_builder.core.live_validation import LiveValidator
+from ccna_lab_builder.core.ssh import SSHConnection
 
 
 class FakeAPI:
@@ -25,7 +26,7 @@ class FakeAPI:
                 "1": {
                     "name": "R1-EDGE",
                     "console": "telnet",
-                    "url": "telnet://127.0.0.1:32769",
+                    "url": "telnet://172.16.200.156:32769",
                     "uuid": "11111111-1111-1111-1111-111111111111",
                     "type": "qemu",
                 }
@@ -37,98 +38,36 @@ class FakeAPI:
         return {"data": {}}
 
 
-class DelayedAPI(FakeAPI):
-    def nodes(self, _lab):
-        self.nodes_calls += 1
-        url = "" if self.nodes_calls < 2 else "telnet://127.0.0.1:32770"
-        return {
-            "data": {
-                "1": {
-                    "name": "R1-EDGE",
-                    "console": "telnet",
-                    "url": url,
-                    "uuid": "11111111-1111-1111-1111-111111111111",
-                    "type": "qemu",
-                }
-            }
-        }
-
-
-class HTML5ThenNativeAPI(FakeAPI):
-    def nodes(self, _lab):
-        self.nodes_calls += 1
-        if self.login_calls:
-            url = "telnet://127.0.0.1:32771"
-        else:
-            url = (
-                "/html5/#/client/MzI3NjkAYwBteXNxbA=="
-                "?token=F1666351184206978A3B4C5A78E5DA6225CA557FDEDCC7199962BB1537961091"
-            )
-        return {
-            "data": {
-                "1": {
-                    "name": "R1-EDGE",
-                    "console": "telnet",
-                    "url": url,
-                    "uuid": "11111111-1111-1111-1111-111111111111",
-                    "type": "qemu",
-                }
-            }
-        }
-
-
-class PersistentHTML5API(FakeAPI):
-    def nodes(self, _lab):
-        self.nodes_calls += 1
-        return {
-            "data": {
-                "1": {
-                    "name": "R1-EDGE",
-                    "console": "telnet",
-                    "url": "/html5/#/client/MzI3NjkAYwBteXNxbA==?token=ABC",
-                    "uuid": "22222222-2222-2222-2222-222222222222",
-                    "type": "qemu",
-                }
-            }
-        }
-
-
-class FakeSSH:
-    def __init__(self, backend, listeners=None):
-        self.backend = backend
+class RuntimeSSH:
+    def __init__(self, runtime_output, listeners=None):
+        self.runtime_output = runtime_output
         self.listeners = list(listeners or [])
-        self.uuids = []
+        self.exec_calls = []
+        self.uuid_calls = []
+
+    def exec(self, command):
+        self.exec_calls.append(command)
+        return self.runtime_output, ""
+
+    @staticmethod
+    def parse_qemu_console_backend(command):
+        return SSHConnection.parse_qemu_console_backend(command)
 
     def discover_qemu_console(self, uuid):
-        self.uuids.append(uuid)
-        return dict(self.backend) if self.backend else None
+        self.uuid_calls.append(uuid)
+        return None
 
     def console_listener_info(self, _port):
         return list(self.listeners)
 
 
-class StartAwareSSH(FakeSSH):
-    def __init__(self, api):
-        super().__init__(None, listeners=[])
-        self.api = api
-
-    def discover_qemu_console(self, uuid):
-        self.uuids.append(uuid)
-        if self.api.start_calls:
-            return {
-                "kind": "tcp",
-                "host": "127.0.0.1",
-                "port": 40001,
-                "source": "qemu-process",
-            }
-        return None
-
-
 class LiveValidationConsoleTests(unittest.TestCase):
     def test_native_endpoint_from_telnet_url(self):
         self.assertEqual(
-            LiveValidator._native_endpoint_from_url("telnet://127.0.0.1:32769"),
-            ("127.0.0.1", 32769),
+            LiveValidator._native_endpoint_from_url(
+                "telnet://172.16.200.156:32769"
+            ),
+            ("172.16.200.156", 32769),
         )
 
     def test_html5_guacamole_url_is_not_treated_as_telnet_port(self):
@@ -138,7 +77,7 @@ class LiveValidationConsoleTests(unittest.TestCase):
         )
         self.assertIsNone(LiveValidator._native_endpoint_from_url(url))
 
-    def test_console_endpoint_from_node_list_url_without_ssh(self):
+    def test_api_console_remains_available_for_api_only_callers(self):
         api = FakeAPI()
         validator = LiveValidator(api, ssh=None)
         node_info = api.nodes("/lab.unl")["data"]["1"]
@@ -147,84 +86,50 @@ class LiveValidationConsoleTests(unittest.TestCase):
             "/lab.unl", 1, node_info=node_info, attempts=1, delay=0
         )
 
-        self.assertEqual(endpoint, ("127.0.0.1", 32769))
-        self.assertEqual(api.node_calls, 0)
+        self.assertEqual(endpoint, ("172.16.200.156", 32769))
 
-    def test_console_endpoint_retries_until_dynamic_url_exists_without_ssh(self):
-        api = DelayedAPI()
-        validator = LiveValidator(api, ssh=None)
-
-        endpoint = validator._console_endpoint("/lab.unl", 1, attempts=2, delay=0)
-
-        self.assertEqual(endpoint, ("127.0.0.1", 32770))
-        self.assertGreaterEqual(api.nodes_calls, 2)
-
-    def test_html5_url_triggers_native_relogin_without_ssh(self):
-        api = HTML5ThenNativeAPI()
-        validator = LiveValidator(api, ssh=None)
-        initial = api.nodes("/lab.unl")["data"]["1"]
-
-        endpoint = validator._console_endpoint(
-            "/lab.unl", 1, node_info=initial, attempts=2, delay=0
-        )
-
-        self.assertEqual(endpoint, ("127.0.0.1", 32771))
-        self.assertEqual(api.login_calls, 1)
-
-    def test_html5_session_uses_qemu_tcp_backend_when_available(self):
-        api = PersistentHTML5API()
-        ssh = FakeSSH(
-            {
-                "kind": "tcp",
-                "host": "127.0.0.1",
-                "port": 40001,
-                "source": "qemu-process",
-            }
-        )
-        validator = LiveValidator(api, ssh=ssh)
-        initial = api.nodes("/lab.unl")["data"]["1"]
-
-        backend = validator._console_backend(
-            "/lab.unl", 1, node_info=initial, attempts=1, delay=0
-        )
-
-        self.assertEqual(backend["port"], 40001)
-        self.assertEqual(ssh.uuids, ["22222222-2222-2222-2222-222222222222"])
-        self.assertEqual(api.login_calls, 0)
-
-    def test_html5_session_can_use_qemu_unix_backend(self):
-        api = PersistentHTML5API()
-        ssh = FakeSSH(
-            {
-                "kind": "unix",
-                "path": "/tmp/eve-console.sock",
-                "source": "qemu-process",
-            }
-        )
-        validator = LiveValidator(api, ssh=ssh)
-        initial = api.nodes("/lab.unl")["data"]["1"]
-
-        backend = validator._console_backend(
-            "/lab.unl", 1, node_info=initial, attempts=1, delay=0
-        )
-
-        self.assertEqual(backend["kind"], "unix")
-        self.assertEqual(backend["path"], "/tmp/eve-console.sock")
-
-    def test_stale_native_url_is_ignored_and_scenario_node_is_started(self):
+    def test_exact_eve_runtime_wins_over_listening_but_wrong_api_port(self):
         api = FakeAPI()
-        ssh = StartAwareSSH(api)
-        validator = LiveValidator(api, ssh=ssh)
-        initial = api.nodes("/lab.unl")["data"]["1"]
+        ssh = RuntimeSSH(
+            "__PID__=4242\n"
+            "__CWD__=/opt/unetlab/tmp/0/lab-uuid-123/1\n"
+            "/opt/qemu/bin/qemu-system-x86_64 "
+            "-serial telnet:127.0.0.1:40001,server,nowait "
+            "-drive file=virtioa.qcow2\n",
+            listeners=["0.0.0.0:32769"],
+        )
+        logs = []
+        validator = LiveValidator(api, ssh=ssh, log=logs.append)
+        validator._active_lab_uuid = "lab-uuid-123"
+        node_info = api.nodes("/lab.unl")["data"]["1"]
 
         backend = validator._console_backend(
-            "/lab.unl", 1, node_info=initial, attempts=1, delay=0
+            "/lab.unl", 1, node_info=node_info, attempts=1, delay=0
         )
+
+        self.assertEqual(backend["source"], "eve-runtime")
+        self.assertEqual(backend["port"], 40001)
+        self.assertEqual(backend["pid"], "4242")
+        self.assertEqual(
+            backend["runtime_dir"],
+            "/opt/unetlab/tmp/0/lab-uuid-123/1",
+        )
+        self.assertEqual(api.start_calls, 0)
+        self.assertTrue(any("lab-uuid-123" in call for call in ssh.exec_calls))
+
+    def test_validator_refuses_unverified_api_port_when_runtime_does_not_match(self):
+        api = FakeAPI()
+        ssh = RuntimeSSH("", listeners=["0.0.0.0:32769"])
+        validator = LiveValidator(api, ssh=ssh, log=lambda _message: None)
+        validator._active_lab_uuid = "lab-uuid-123"
+        node_info = api.nodes("/lab.unl")["data"]["1"]
+
+        with self.assertRaisesRegex(RuntimeError, "refused to use an unverified"):
+            validator._console_backend(
+                "/lab.unl", 1, node_info=node_info, attempts=1, delay=0
+            )
 
         self.assertEqual(api.start_calls, 1)
-        self.assertEqual(backend["source"], "qemu-process")
-        self.assertEqual(backend["port"], 40001)
-        self.assertNotEqual(backend["port"], 32769)
 
 
 if __name__ == "__main__":

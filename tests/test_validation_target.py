@@ -4,41 +4,41 @@ from ccna_lab_builder.core.live_validation import LiveValidator
 
 
 class FakeAPI:
-    def __init__(self, existing_labs):
-        self.existing_labs = set(existing_labs)
-        self.lookups = []
+    def __init__(self):
+        self.get_lab_calls = []
 
     def get_lab(self, lab):
-        self.lookups.append(lab)
-        if lab not in self.existing_labs:
-            raise RuntimeError("lab not found")
-        return {"status": "success", "data": {"path": lab}}
+        self.get_lab_calls.append(lab)
+        return {
+            "status": "success",
+            "data": {
+                "id": "lab-uuid-123",
+                "name": "Selected Lab",
+            },
+        }
 
 
 class ValidationTargetTests(unittest.TestCase):
-    def test_master_target_switches_to_existing_scenario_lab(self):
-        scenario_lab = "/CCNA-200-301/CCNA-01-INITIAL-CONFIGURATION.unl"
-        api = FakeAPI({scenario_lab})
-        validator = LiveValidator(api, ssh=None, log=lambda _message: None)
-        scenario = {"id": "01", "name": "Initial Configuration"}
+    def test_validator_uses_exact_requested_lab_without_silent_redirect(self):
+        api = FakeAPI()
+        logs = []
+        validator = LiveValidator(api, ssh=None, log=logs.append)
+        scenario = {
+            "id": "01",
+            "name": "Initial Configuration",
+            "checks": [],
+        }
+        requested = "/CCNA-200-301/CCNA-MASTER-LAB.unl"
 
-        resolved = validator._resolve_lab(
-            "/CCNA-200-301/CCNA-MASTER-LAB.unl",
-            scenario,
+        results = validator.validate(requested, scenario)
+
+        self.assertEqual(results, [])
+        self.assertEqual(api.get_lab_calls, [requested])
+        self.assertIn(
+            "Validation target (exact): /CCNA-200-301/CCNA-MASTER-LAB.unl; "
+            "lab_uuid=lab-uuid-123",
+            logs,
         )
-
-        self.assertEqual(resolved, scenario_lab)
-
-    def test_existing_scenario_target_is_not_replaced(self):
-        scenario_lab = "/CCNA-200-301/CCNA-01-INITIAL-CONFIGURATION.unl"
-        api = FakeAPI(set())
-        validator = LiveValidator(api, ssh=None, log=lambda _message: None)
-        scenario = {"id": "01", "name": "Initial Configuration"}
-
-        resolved = validator._resolve_lab(scenario_lab, scenario)
-
-        self.assertEqual(resolved, scenario_lab)
-        self.assertEqual(api.lookups, [])
 
 
 if __name__ == "__main__":
