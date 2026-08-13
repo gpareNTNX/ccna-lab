@@ -1,0 +1,4 @@
+from ccna_lab_builder.core.eve_wrapper_console import install_qemu_wrapper_parser
+
+
+install_qemu_wrapper_parser()
