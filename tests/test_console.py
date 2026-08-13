@@ -24,6 +24,27 @@ class FakeChannel:
         return self.response_chunks.pop(0)
 
 
+class ScriptedChannel:
+    def __init__(self, responses_per_send):
+        self.responses_per_send = [list(chunks) for chunks in responses_per_send]
+        self.current = []
+        self.sent = []
+
+    def settimeout(self, _timeout):
+        return None
+
+    def send(self, data):
+        self.sent.append(data)
+        self.current = self.responses_per_send.pop(0) if self.responses_per_send else []
+        return len(data)
+
+    def recv_ready(self):
+        return bool(self.current)
+
+    def recv(self, _size):
+        return self.current.pop(0)
+
+
 class CiscoConsoleTests(unittest.TestCase):
     def test_command_reads_until_ios_prompt(self):
         channel = FakeChannel(
@@ -46,6 +67,34 @@ class CiscoConsoleTests(unittest.TestCase):
         output = CiscoConsole._clean_telnet(data)
         self.assertIn("hostname R1-EDGE", output)
         self.assertNotIn("\ufffd", output)
+
+    def test_ensure_privileged_promotes_user_exec(self):
+        channel = ScriptedChannel(
+            [
+                [b"Router>"],
+                [b"Router#"],
+            ]
+        )
+        console = CiscoConsole(channel)
+
+        prompt = console.ensure_privileged(timeout=0.5)
+
+        self.assertEqual(prompt, "Router#")
+        self.assertIn(b"enable\r", channel.sent)
+
+    def test_ensure_privileged_exits_config_mode(self):
+        channel = ScriptedChannel(
+            [
+                [b"R1-EDGE(config)#"],
+                [b"R1-EDGE#"],
+            ]
+        )
+        console = CiscoConsole(channel)
+
+        prompt = console.ensure_privileged(timeout=0.5)
+
+        self.assertEqual(prompt, "R1-EDGE#")
+        self.assertIn(b"end\r", channel.sent)
 
 
 if __name__ == "__main__":
