@@ -1,4 +1,4 @@
-from ccna_lab_builder.core.topology import NODES, LINKS, all_node_payloads
+from ccna_lab_builder.core.topology import LINKS, all_node_payloads
 
 
 class LabBuilder:
