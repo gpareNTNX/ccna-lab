@@ -1,6 +1,5 @@
-import base64
-import re
 import time
+from urllib.parse import urlparse
 
 from ccna_lab_builder.core.ssh import CiscoConsole
 from ccna_lab_builder.core.validator import Validator
@@ -18,73 +17,64 @@ class LiveValidator:
         return {v["name"]: (int(k), v) for k, v in data.items()}
 
     @staticmethod
-    def _port_from_url(url):
-        """Extract the dynamic EVE-NG console port from native or HTML5 URLs.
+    def _native_endpoint_from_url(url):
+        """Return (host, port) only for a real native console URL.
 
-        Native console examples use ``telnet://127.0.0.1:32769``.
-        Current HTML5/Guacamole URLs can look like
-        ``/html5/#/client/MzI3NjkAYwBteXNxbA==?token=...``. The client token
-        is base64-encoded Guacamole connection data whose first NUL-delimited
-        field is the dynamic console port (``32769\0c\0mysql`` in this example).
+        HTML5/Guacamole client identifiers are not raw Telnet ports and must
+        never be opened directly through SSH port forwarding.
         """
         if not isinstance(url, str):
             return None
 
         value = url.strip()
-
-        # Native EVE-NG console URL.
-        match = re.search(r":(\d+)/?$", value)
-        if match:
-            port = int(match.group(1))
-            return port if 1 <= port <= 65535 else None
-
-        # HTML5 / Guacamole console URL.
-        match = re.search(r"/client/([^/?#]+)", value)
-        if not match:
+        if not value or "/html5/" in value or "/client/" in value:
             return None
 
-        encoded = match.group(1)
-        try:
-            padded = encoded + "=" * (-len(encoded) % 4)
-            decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
-            first_field = decoded.split(b"\x00", 1)[0].decode("ascii")
-            if not first_field.isdigit():
-                return None
-            port = int(first_field)
-            return port if 1 <= port <= 65535 else None
-        except (ValueError, UnicodeDecodeError, base64.binascii.Error):
+        parsed = urlparse(value)
+        if parsed.scheme not in {"telnet", "tcp"} or not parsed.hostname or not parsed.port:
             return None
+        if not 1 <= parsed.port <= 65535:
+            return None
+        return parsed.hostname, parsed.port
 
-    def _console_port(self, lab, node_id, node_info=None, attempts=12, delay=1.0):
-        """Return EVE-NG's dynamic native-console port for a node.
+    @staticmethod
+    def _is_html5_url(url):
+        return isinstance(url, str) and ("/html5/" in url or "/client/" in url)
 
-        EVE-NG can expose either a native telnet URL or an HTML5/Guacamole URL.
-        Prefer the node-list data, because recent builds expose the current
-        dynamic console information there, and use the single-node endpoint as
-        a compatibility fallback.
-        """
+    def _console_endpoint(self, lab, node_id, node_info=None, attempts=12, delay=1.0):
+        """Return EVE-NG's raw native console endpoint for a node."""
         candidate = node_info or {}
+        native_session_refreshed = False
 
         for attempt in range(1, attempts + 1):
-            port = self._port_from_url(candidate.get("url"))
-            if port:
-                return port
+            url = candidate.get("url")
+            endpoint = self._native_endpoint_from_url(url)
+            if endpoint:
+                return endpoint
+
+            if self._is_html5_url(url) and not native_session_refreshed:
+                self.log(
+                    f"Node {node_id}: HTML5 console URL detected; "
+                    "requesting native EVE-NG console mode..."
+                )
+                self.api.login()
+                native_session_refreshed = True
 
             nodes = self.api.nodes(lab).get("data", {})
             candidate = nodes.get(str(node_id), {})
-            port = self._port_from_url(candidate.get("url"))
-            if port:
-                return port
+            endpoint = self._native_endpoint_from_url(candidate.get("url"))
+            if endpoint:
+                return endpoint
 
             detail = self.api.node(lab, node_id).get("data", {})
-            port = self._port_from_url(detail.get("url"))
-            if port:
-                return port
+            endpoint = self._native_endpoint_from_url(detail.get("url"))
+            if endpoint:
+                return endpoint
 
             if attempt < attempts:
                 if attempt == 1:
                     self.log(
-                        f"Node {node_id}: waiting for EVE-NG to assign a console port..."
+                        f"Node {node_id}: waiting for EVE-NG to expose a native console port..."
                     )
                 time.sleep(delay)
 
@@ -92,9 +82,9 @@ class LiveValidator:
         console = candidate.get("console", "unknown")
         url = candidate.get("url") or "none"
         raise RuntimeError(
-            f"No console port available for node {node_id} after {attempts} attempts. "
+            f"No native console endpoint available for node {node_id} after {attempts} attempts. "
             f"EVE status={status}, console={console}, url={url}. "
-            "Make sure EVE-NG exposes a supported native or HTML5 console URL."
+            "The validator requires EVE-NG native console mode, not an HTML5/Guacamole client URL."
         )
 
     def run_check(self, lab, check):
@@ -103,10 +93,10 @@ class LiveValidator:
             raise RuntimeError(f"Node {check['node']} not found.")
 
         node_id, node_info = nodes[check["node"]]
-        port = self._console_port(lab, node_id, node_info=node_info)
-        self.log(f"{check['node']}: console port {port}")
+        host, port = self._console_endpoint(lab, node_id, node_info=node_info)
+        self.log(f"{check['node']}: native console {host}:{port}")
 
-        channel = self.ssh.open_eve_console(port)
+        channel = self.ssh.open_eve_console(port, target_host=host)
         try:
             console = CiscoConsole(channel)
             console.bootstrap()
