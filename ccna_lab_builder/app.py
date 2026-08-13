@@ -3,6 +3,11 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from ccna_lab_builder.core.builder import LabBuilder
+from ccna_lab_builder.core.console_auth import (
+    LAB_ENABLE_SECRET,
+    LAB_IOS_PASSWORD,
+    LAB_IOS_USERNAME,
+)
 from ccna_lab_builder.gui.main import MainWindow
 
 
@@ -41,11 +46,36 @@ class SafeMainWindow(MainWindow):
 
         self.after(0, update)
 
+    def _append_lab_access_instructions(self, scenario):
+        access = (
+            "\n\nLAB ACCESS CREDENTIALS — use these exact training values\n"
+            f"IOS username: {LAB_IOS_USERNAME}\n"
+            f"IOS password: {LAB_IOS_PASSWORD}\n"
+            f"Enable secret: {LAB_ENABLE_SECRET}\n"
+            "These credentials are intentionally shared for this isolated CCNA lab only. "
+            "Do not reuse them on production systems.\n"
+        )
+        if scenario.get("id") == "01":
+            access += (
+                "\nRequired management values for Scenario 01:\n"
+                "- Hostname: R1-EDGE\n"
+                "- Local user: admin, privilege 15\n"
+                "- Domain name: ccna.lab\n"
+                "- SSH version: 2\n"
+                "- Console: login local\n"
+                "- VTY 0 4: login local, transport input ssh\n"
+            )
+
+        self.scenario_text.configure(state="normal")
+        self.scenario_text.insert("end", access)
+        self.scenario_text.configure(state="disabled")
+
     def select_scenario(self, event=None):
-        """Select a scenario and make its exact lab path visible in Validator."""
+        """Select a scenario, show access requirements, and set its validation lab."""
         super().select_scenario(event)
         if not self.current_scenario:
             return
+        self._append_lab_access_instructions(self.current_scenario)
         lab = self._scenario_lab_path(self.current_scenario)
         self._set_validation_target(lab)
         self.log("Validator target selected explicitly: " + lab)
