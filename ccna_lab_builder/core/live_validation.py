@@ -1,3 +1,4 @@
+import re
 import time
 from urllib.parse import urlparse
 
@@ -15,6 +16,36 @@ class LiveValidator:
     def _node_map(self, lab):
         data = self.api.nodes(lab).get("data", {})
         return {v["name"]: (int(k), v) for k, v in data.items()}
+
+    @staticmethod
+    def _scenario_lab_name(scenario):
+        slug = re.sub(r"[^A-Z0-9._-]+", "-", scenario["name"].upper()).strip("-")
+        return f"CCNA-{scenario['id']}-{slug}.unl"
+
+    def _resolve_lab(self, requested_lab, scenario):
+        """Prefer the deterministic scenario lab over the Master Lab when it exists."""
+        requested = str(requested_lab or "").strip()
+        folder = requested.rsplit("/", 1)[0] if "/" in requested else ""
+        scenario_name = self._scenario_lab_name(scenario)
+        candidate = (folder.rstrip("/") + "/" + scenario_name) if folder else "/" + scenario_name
+
+        current_name = requested.rsplit("/", 1)[-1]
+        expected_prefix = f"CCNA-{scenario['id']}-"
+        if current_name.startswith(expected_prefix):
+            return requested
+
+        try:
+            self.api.get_lab(candidate)
+        except RuntimeError:
+            self.log(
+                f"Validator target remains {requested}: scenario lab {candidate} was not found."
+            )
+            return requested
+
+        self.log(
+            f"Validator target adjusted from {requested} to scenario lab {candidate}."
+        )
+        return candidate
 
     @staticmethod
     def _native_backend_from_url(url):
@@ -180,28 +211,37 @@ class LiveValidator:
     def run_check(self, lab, check):
         nodes = self._node_map(lab)
         if check["node"] not in nodes:
-            raise RuntimeError(f"Node {check['node']} not found.")
+            raise RuntimeError(f"Node {check['node']} not found in {lab}.")
 
         node_id, node_info = nodes[check["node"]]
         backend = self._console_backend(lab, node_id, node_info=node_info)
         if backend["kind"] == "tcp":
-            self.log(
-                f"{check['node']}: console {backend['host']}:{backend['port']} "
-                f"({backend.get('source', 'unknown')})"
-            )
+            backend_label = f"{backend['host']}:{backend['port']}"
         else:
-            self.log(
-                f"{check['node']}: console {backend['path']} "
-                f"({backend.get('source', 'unknown')})"
-            )
+            backend_label = backend["path"]
+        self.log(
+            f"{check['node']}: console {backend_label} "
+            f"({backend.get('source', 'unknown')})"
+        )
 
         channel = self.ssh.open_console_backend(backend)
         try:
             console = CiscoConsole(channel)
             console.bootstrap()
+            prompt = console.ensure_privileged(timeout=5.0)
+            self.log(
+                f"{check['node']}: lab={lab}, node_id={node_id}, "
+                f"uuid={node_info.get('uuid', 'unknown')}, prompt={prompt}"
+            )
             console.command("terminal length 0", timeout=5.0)
             output = console.command(check["command"], timeout=8.0)
             result = self.validator.validate_output(check, output)
+            context = (
+                f"[Validator target] lab={lab}; node_id={node_id}; "
+                f"uuid={node_info.get('uuid', 'unknown')}; prompt={prompt}; "
+                f"backend={backend_label} ({backend.get('source', 'unknown')})"
+            )
+            result.output = context + ("\n" + result.output if result.output else "")
             if result.passed:
                 self.log(f"{check['node']}: validation PASS")
             else:
@@ -214,8 +254,10 @@ class LiveValidator:
             channel.close()
 
     def validate(self, lab, scenario):
+        resolved_lab = self._resolve_lab(lab, scenario)
+        self.log(f"Validation target: {resolved_lab}")
         results = []
         for check in scenario.get("checks", []):
             self.log(f"{check['node']}: {check['command']}")
-            results.append(self.run_check(lab, check))
+            results.append(self.run_check(resolved_lab, check))
         return results
