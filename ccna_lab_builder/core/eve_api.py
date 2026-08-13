@@ -16,8 +16,8 @@ class EVEApi:
         self.session.verify = verify_ssl
         self._auth_lock = threading.Lock()
 
-    def _path(self, lab):
-        return quote(lab.lstrip("/"), safe="/")
+    def _path(self, path):
+        return quote(path.lstrip("/"), safe="/")
 
     @staticmethod
     def _decode_response(response):
@@ -89,8 +89,40 @@ class EVEApi:
         """Return information about the currently authenticated API user."""
         return self.request("GET", "/auth")
 
+    def folder(self, path):
+        """Return the content of an existing EVE-NG folder."""
+        normalized = "/" + "/".join(part for part in path.split("/") if part)
+        if normalized == "/":
+            return self.request("GET", "/folders/")
+        return self.request("GET", "/folders/" + self._path(normalized))
+
     def create_folder(self, parent, name):
         return self.request("POST", "/folders", json={"path": parent, "name": name})
+
+    def ensure_folder(self, path):
+        """Create a folder path recursively when it does not already exist.
+
+        EVE-NG requires the parent folder to exist before POST /labs. This
+        helper walks the requested path from root and creates only missing
+        components using the documented POST /folders API.
+        """
+        parts = [part for part in path.strip().split("/") if part]
+        if not parts:
+            return "/"
+
+        parent = "/"
+        for part in parts:
+            current = parent.rstrip("/") + "/" + part
+            try:
+                self.folder(current)
+            except RuntimeError as exc:
+                message = str(exc)
+                if "60008" not in message and "does not exist" not in message.lower():
+                    raise
+                self.create_folder(parent, part)
+            parent = current
+
+        return parent
 
     def create_lab(self, folder, name, description="CCNA 200-301 lab"):
         return self.request(
