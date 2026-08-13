@@ -1,6 +1,8 @@
 import json
 from importlib.resources import files
 
+from ccna_lab_builder.data.workbook_scenarios import workbook_scenarios
+
 
 class ScenarioCatalog:
     def __init__(self):
@@ -15,6 +17,8 @@ class ScenarioCatalog:
             if not isinstance(loaded, list):
                 raise ValueError(f"{filename} must contain a JSON list.")
             scenarios.extend(loaded)
+
+        scenarios.extend(workbook_scenarios())
 
         seen = set()
         for scenario in scenarios:
