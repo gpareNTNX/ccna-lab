@@ -1,3 +1,4 @@
+import base64
 import re
 import time
 
@@ -18,18 +19,49 @@ class LiveValidator:
 
     @staticmethod
     def _port_from_url(url):
+        """Extract the dynamic EVE-NG console port from native or HTML5 URLs.
+
+        Native console examples use ``telnet://127.0.0.1:32769``.
+        Current HTML5/Guacamole URLs can look like
+        ``/html5/#/client/MzI3NjkAYwBteXNxbA==?token=...``. The client token
+        is base64-encoded Guacamole connection data whose first NUL-delimited
+        field is the dynamic console port (``32769\0c\0mysql`` in this example).
+        """
         if not isinstance(url, str):
             return None
-        match = re.search(r":(\d+)/?$", url.strip())
-        return int(match.group(1)) if match else None
+
+        value = url.strip()
+
+        # Native EVE-NG console URL.
+        match = re.search(r":(\d+)/?$", value)
+        if match:
+            port = int(match.group(1))
+            return port if 1 <= port <= 65535 else None
+
+        # HTML5 / Guacamole console URL.
+        match = re.search(r"/client/([^/?#]+)", value)
+        if not match:
+            return None
+
+        encoded = match.group(1)
+        try:
+            padded = encoded + "=" * (-len(encoded) % 4)
+            decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
+            first_field = decoded.split(b"\x00", 1)[0].decode("ascii")
+            if not first_field.isdigit():
+                return None
+            port = int(first_field)
+            return port if 1 <= port <= 65535 else None
+        except (ValueError, UnicodeDecodeError, base64.binascii.Error):
+            return None
 
     def _console_port(self, lab, node_id, node_info=None, attempts=12, delay=1.0):
         """Return EVE-NG's dynamic native-console port for a node.
 
-        Recent EVE-NG releases expose the dynamic console URL on the *node list*
-        response. Some builds do not expose the same URL consistently on the
-        single-node endpoint, so always prefer the list data and use the detail
-        endpoint only as a fallback.
+        EVE-NG can expose either a native telnet URL or an HTML5/Guacamole URL.
+        Prefer the node-list data, because recent builds expose the current
+        dynamic console information there, and use the single-node endpoint as
+        a compatibility fallback.
         """
         candidate = node_info or {}
 
@@ -38,15 +70,12 @@ class LiveValidator:
             if port:
                 return port
 
-            # Refresh the node list first: this is where current EVE-NG builds
-            # expose dynamic native-console URLs such as telnet://127.0.0.1:32769.
             nodes = self.api.nodes(lab).get("data", {})
             candidate = nodes.get(str(node_id), {})
             port = self._port_from_url(candidate.get("url"))
             if port:
                 return port
 
-            # Compatibility fallback for older EVE-NG builds.
             detail = self.api.node(lab, node_id).get("data", {})
             port = self._port_from_url(detail.get("url"))
             if port:
@@ -65,7 +94,7 @@ class LiveValidator:
         raise RuntimeError(
             f"No console port available for node {node_id} after {attempts} attempts. "
             f"EVE status={status}, console={console}, url={url}. "
-            "Make sure the node is started and has finished launching in EVE-NG."
+            "Make sure EVE-NG exposes a supported native or HTML5 console URL."
         )
 
     def run_check(self, lab, check):
