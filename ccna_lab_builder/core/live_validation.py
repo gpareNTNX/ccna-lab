@@ -70,53 +70,102 @@ class LiveValidator:
                 )
         return backend
 
-    def _console_backend(self, lab, node_id, node_info=None, attempts=6, delay=1.0):
-        """Resolve a usable console backend from EVE API or the QEMU process."""
+    def _api_tcp_backend_if_live(self, node_info):
+        backend = self._native_backend_from_url(node_info.get("url"))
+        if not backend:
+            return None
+
+        # Without SSH we cannot verify the remote listener; retain legacy/test
+        # behavior. In the real desktop app, never trust a stale EVE URL unless
+        # EVE itself reports a TCP listener for that port.
+        if not self.ssh:
+            return backend
+
+        listeners = self.ssh.console_listener_info(backend["port"])
+        if listeners:
+            return backend
+
+        self.log(
+            f"Ignoring stale EVE API console URL {backend['host']}:{backend['port']}: "
+            "no TCP listener exists on the EVE-NG server."
+        )
+        return None
+
+    def _console_backend(self, lab, node_id, node_info=None, attempts=15, delay=1.0):
+        """Resolve a usable backend and start the node when necessary.
+
+        A configured EVE node may have a console URL even while its QEMU
+        process is not running. Therefore process discovery is authoritative;
+        native API URLs are accepted only when their TCP listener really exists.
+        """
         candidate = node_info or {}
         native_session_refreshed = False
+        start_attempted = False
+        start_error = None
 
         for attempt in range(1, attempts + 1):
-            backend = self._native_backend_from_url(candidate.get("url"))
-            if backend:
-                return backend
-
-            # HTML5 URLs contain a Guacamole/MySQL connection identifier, not
-            # a raw Telnet port. Inspect the running QEMU process instead.
+            # 1. Prefer the backend of the running QEMU process. This avoids
+            # stale or Guacamole-derived API console URLs.
             qemu_backend = self._qemu_backend(candidate)
             if qemu_backend:
                 return qemu_backend
 
+            # 2. A native API endpoint is usable only if the socket exists.
+            api_backend = self._api_tcp_backend_if_live(candidate)
+            if api_backend:
+                return api_backend
+
+            # 3. If no process/socket exists, ensure the scenario node is
+            # actually started. START ALL in the Master tab targets the master
+            # lab, not a freshly-created scenario lab.
+            if not start_attempted:
+                try:
+                    self.log(
+                        f"Node {node_id}: no running console backend found; "
+                        "starting the scenario node via EVE-NG API..."
+                    )
+                    self.api.start_node(lab, node_id)
+                    self.log(f"Node {node_id}: EVE-NG start request accepted.")
+                except RuntimeError as exc:
+                    start_error = str(exc)
+                    self.log(
+                        f"Node {node_id}: start request returned: {start_error}. "
+                        "Continuing discovery in case the node is already starting."
+                    )
+                start_attempted = True
+
             if self._is_html5_url(candidate.get("url")) and not native_session_refreshed:
-                self.log(
-                    f"Node {node_id}: HTML5 console URL detected; "
-                    "requesting native EVE-NG console mode..."
-                )
                 self.api.login()
                 native_session_refreshed = True
 
+            # Refresh EVE data after start/re-login.
             nodes = self.api.nodes(lab).get("data", {})
             candidate = nodes.get(str(node_id), candidate)
-            backend = self._native_backend_from_url(candidate.get("url"))
-            if backend:
-                return backend
 
             qemu_backend = self._qemu_backend(candidate)
             if qemu_backend:
                 return qemu_backend
 
-            detail = self.api.node(lab, node_id).get("data", {})
-            backend = self._native_backend_from_url(detail.get("url"))
-            if backend:
-                return backend
+            api_backend = self._api_tcp_backend_if_live(candidate)
+            if api_backend:
+                return api_backend
 
-            qemu_backend = self._qemu_backend(detail)
+            detail = self.api.node(lab, node_id).get("data", {})
+            if detail:
+                candidate = {**candidate, **detail}
+
+            qemu_backend = self._qemu_backend(candidate)
             if qemu_backend:
                 return qemu_backend
+
+            api_backend = self._api_tcp_backend_if_live(candidate)
+            if api_backend:
+                return api_backend
 
             if attempt < attempts:
                 if attempt == 1:
                     self.log(
-                        f"Node {node_id}: waiting for EVE-NG/QEMU console backend..."
+                        f"Node {node_id}: waiting for EVE-NG/QEMU to create the console backend..."
                     )
                 time.sleep(delay)
 
@@ -124,13 +173,15 @@ class LiveValidator:
         console = candidate.get("console", "unknown")
         url = candidate.get("url") or "none"
         uuid = candidate.get("uuid") or "none"
+        extra = f" Start result: {start_error}" if start_error else ""
         raise RuntimeError(
             f"No usable console backend available for node {node_id} after {attempts} attempts. "
             f"EVE status={status}, console={console}, uuid={uuid}, url={url}. "
-            "The API did not expose a native console and no matching QEMU serial backend was found."
+            "No matching QEMU serial backend or live native TCP listener was found."
+            + extra
         )
 
-    def _console_endpoint(self, lab, node_id, node_info=None, attempts=6, delay=1.0):
+    def _console_endpoint(self, lab, node_id, node_info=None, attempts=15, delay=1.0):
         """Backward-compatible native TCP endpoint helper."""
         backend = self._console_backend(
             lab, node_id, node_info=node_info, attempts=attempts, delay=delay
