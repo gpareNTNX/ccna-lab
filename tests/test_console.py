@@ -96,6 +96,23 @@ class CiscoConsoleTests(unittest.TestCase):
         self.assertEqual(prompt, "R1-EDGE#")
         self.assertIn(b"end\r", channel.sent)
 
+    def test_wait_for_prompt_handles_ios_boot_delay(self):
+        channel = ScriptedChannel(
+            [
+                [b"System Bootstrap, Version 15.x\r\nLoading IOS...\r\n"],
+                [b"Router>"],
+            ]
+        )
+        console = CiscoConsole(channel)
+
+        prompt = console.wait_for_prompt(timeout=0.3, pulse=0.05)
+
+        self.assertEqual(prompt, "Router>")
+        self.assertGreaterEqual(channel.sent.count(b"\r"), 2)
+
+    def test_prompt_parser_accepts_leading_console_whitespace(self):
+        self.assertEqual(CiscoConsole._last_prompt("\r\n  R1-EDGE#  \r\n"), "R1-EDGE#")
+
 
 if __name__ == "__main__":
     unittest.main()
