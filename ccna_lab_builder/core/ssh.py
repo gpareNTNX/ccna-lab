@@ -364,10 +364,15 @@ class CiscoConsole:
         return self._last_prompt(output)
 
     def ensure_privileged(self, timeout=90.0):
-        """Wait for IOS readiness, then ensure privileged EXEC (hostname#)."""
-        prompt = self.current_prompt(timeout=min(4.0, timeout))
+        """Wait for IOS readiness, then ensure privileged EXEC (hostname#).
+
+        Callers may pass a short command timeout, but boot readiness is a
+        separate concern. Never reduce the IOS boot window below 90 seconds.
+        """
+        boot_timeout = max(90.0, float(timeout))
+        prompt = self.current_prompt(timeout=min(4.0, boot_timeout))
         if not prompt:
-            prompt = self.wait_for_prompt(timeout=timeout)
+            prompt = self.wait_for_prompt(timeout=boot_timeout)
 
         if "(config" in prompt.lower():
             output = self.command("end", timeout=5.0)
