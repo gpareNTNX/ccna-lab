@@ -1,6 +1,8 @@
 from ccna_lab_builder.core.console_auth import install_console_auth
 from ccna_lab_builder.core.eve_wrapper_console import install_qemu_wrapper_parser
+from ccna_lab_builder.core.prompt_compat import install_inline_prompt_parser
 
 
 install_qemu_wrapper_parser()
 install_console_auth()
+install_inline_prompt_parser()
