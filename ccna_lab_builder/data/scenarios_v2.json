@@ -1,0 +1,98 @@
+[
+  {
+    "id": "21",
+    "schema_version": 2,
+    "name": "Interface Operations",
+    "domain": "Network Fundamentals",
+    "difficulty": "Easy",
+    "minutes": 25,
+    "objective": "Configure routed interfaces and verify both addressing and operational state.",
+    "tasks": ["Configure R1-EDGE Gi0/0 as 10.0.12.1/30 and bring it up.", "Configure R2-HQ Gi0/0 as 10.0.12.2/30 and bring it up.", "Verify both interfaces are up/up and R1 can ping R2."],
+    "topology": {"nodes": [{"name":"R1-EDGE","template":"vios","left":"25%","top":"40%"},{"name":"R2-HQ","template":"vios","left":"65%","top":"40%"}], "links": [{"a":"R1-EDGE","a_if":"Gi0/0","b":"R2-HQ","b_if":"Gi0/0"}]},
+    "checks": [
+      {"node":"R1-EDGE","command":"show ip interface brief","assertions":[{"type":"interface_ipv4","interface":"GigabitEthernet0/0","ip":"10.0.12.1","status":"up","protocol":"up","label":"Gi0/0 10.0.12.1 up/up"}],"remediation":["configure terminal","interface GigabitEthernet0/0","ip address 10.0.12.1 255.255.255.252","no shutdown","end"]},
+      {"node":"R2-HQ","command":"show ip interface brief","assertions":[{"type":"interface_ipv4","interface":"GigabitEthernet0/0","ip":"10.0.12.2","status":"up","protocol":"up","label":"Gi0/0 10.0.12.2 up/up"}],"remediation":["configure terminal","interface GigabitEthernet0/0","ip address 10.0.12.2 255.255.255.252","no shutdown","end"]},
+      {"node":"R1-EDGE","command":"ping 10.0.12.2 repeat 3","assertions":[{"type":"contains","value":"Success rate is 100 percent","label":"R1 to R2 ping 100%"}]}
+    ]
+  },
+  {
+    "id":"22","schema_version":2,"name":"CDP and LLDP Discovery","domain":"Network Fundamentals","difficulty":"Easy","minutes":25,
+    "objective":"Use CDP and LLDP to verify directly connected infrastructure.",
+    "tasks":["Connect SW1-CORE Gi0/1 to SW2-DIST Gi0/1.","Enable CDP and LLDP on both switches.","Verify SW1 discovers SW2 with both protocols."],
+    "topology":{"nodes":[{"name":"SW1-CORE","template":"viosl2","left":"25%","top":"40%"},{"name":"SW2-DIST","template":"viosl2","left":"65%","top":"40%"}],"links":[{"a":"SW1-CORE","a_if":"Gi0/1","b":"SW2-DIST","b_if":"Gi0/1"}]},
+    "checks":[
+      {"node":"SW1-CORE","command":"show cdp neighbors","assertions":[{"type":"cdp_neighbor","device_id":"SW2-DIST","label":"CDP sees SW2-DIST"}],"remediation":["configure terminal","cdp run","interface GigabitEthernet0/1","cdp enable","no shutdown","end"]},
+      {"node":"SW1-CORE","command":"show lldp neighbors","assertions":[{"type":"contains","value":"SW2-DIST","label":"LLDP sees SW2-DIST"}],"remediation":["configure terminal","lldp run","interface GigabitEthernet0/1","no shutdown","end"]}
+    ]
+  },
+  {
+    "id":"23","schema_version":2,"name":"NTP Configuration","domain":"IP Services","difficulty":"Easy","minutes":20,
+    "objective":"Configure a deterministic NTP client relationship and verify the running configuration.",
+    "tasks":["Configure R1-EDGE to use 192.0.2.10 as NTP server.","Create Loopback0 10.255.255.1/32 and source NTP from it."],
+    "topology":{"nodes":[{"name":"R1-EDGE","template":"vios","left":"45%","top":"40%"}],"links":[]},
+    "checks":[{"node":"R1-EDGE","command":"show running-config | include ^ntp|^interface Loopback0|ip address 10.255.255.1","assertions":[{"type":"contains","value":"ntp server 192.0.2.10","label":"NTP server 192.0.2.10"},{"type":"contains","value":"ntp source Loopback0","label":"NTP source Loopback0"},{"type":"contains","value":"ip address 10.255.255.1 255.255.255.255","label":"Loopback0 10.255.255.1/32"}],"remediation":["configure terminal","interface Loopback0","ip address 10.255.255.1 255.255.255.255","exit","ntp source Loopback0","ntp server 192.0.2.10","end"]}]
+  },
+  {
+    "id":"24","schema_version":2,"name":"Syslog Management","domain":"IP Services","difficulty":"Easy","minutes":20,
+    "objective":"Configure centralized Syslog and timestamped IOS logging.",
+    "tasks":["Configure logging host 192.0.2.20.","Set trap severity to warnings.","Enable millisecond timestamps for log messages."],
+    "topology":{"nodes":[{"name":"R2-HQ","template":"vios","left":"45%","top":"40%"}],"links":[]},
+    "checks":[{"node":"R2-HQ","command":"show running-config | include ^logging|^service timestamps log","assertions":[{"type":"contains","value":"logging host 192.0.2.20","label":"Syslog host 192.0.2.20"},{"type":"contains","value":"logging trap warnings","label":"Syslog severity warnings"},{"type":"regex","pattern":"service timestamps log datetime.*msec","label":"Millisecond log timestamps"}],"remediation":["configure terminal","service timestamps log datetime msec","logging host 192.0.2.20","logging trap warnings","end"]}]
+  },
+  {
+    "id":"25","schema_version":2,"name":"HSRP First-Hop Redundancy","domain":"IP Connectivity","difficulty":"Bonus","minutes":35,
+    "objective":"Build an HSRP pair and verify active and standby gateways.",
+    "tasks":["Configure R1-HSRP Gi0/0 10.10.10.2/24 and R2-HSRP Gi0/0 10.10.10.3/24.","Use HSRP group 10 virtual IP 10.10.10.1.","Make R1 preferred active with priority 110 and preempt."],
+    "topology":{"nodes":[{"name":"R1-HSRP","template":"vios","left":"20%","top":"30%"},{"name":"R2-HSRP","template":"vios","left":"65%","top":"30%"},{"name":"SW1-ACCESS","template":"viosl2","left":"42%","top":"68%"}],"links":[{"a":"R1-HSRP","a_if":"Gi0/0","b":"SW1-ACCESS","b_if":"Gi0/0"},{"a":"R2-HSRP","a_if":"Gi0/0","b":"SW1-ACCESS","b_if":"Gi0/1"}]},
+    "checks":[{"node":"R1-HSRP","command":"show standby brief","assertions":[{"type":"hsrp","interface":"Gi0/0","state":"Active","virtual_ip":"10.10.10.1","label":"R1 active / VIP 10.10.10.1"}]},{"node":"R2-HSRP","command":"show standby brief","assertions":[{"type":"hsrp","interface":"Gi0/0","state":"Standby","virtual_ip":"10.10.10.1","label":"R2 standby / VIP 10.10.10.1"}]}]
+  },
+  {
+    "id":"26","schema_version":2,"name":"SNMP Operations","domain":"IP Services","difficulty":"Medium","minutes":25,
+    "objective":"Configure basic read-only SNMP and identify the managed device.",
+    "tasks":["Configure community CCNA-RO as read-only.","Set location LAB.","Set contact admin@ccna.lab."],
+    "topology":{"nodes":[{"name":"R1-EDGE","template":"vios","left":"45%","top":"40%"}],"links":[]},
+    "checks":[{"node":"R1-EDGE","command":"show running-config | include ^snmp-server","assertions":[{"type":"contains","value":"snmp-server community CCNA-RO RO","label":"Read-only SNMP community"},{"type":"contains","value":"snmp-server location LAB","label":"SNMP location LAB"},{"type":"contains","value":"snmp-server contact admin@ccna.lab","label":"SNMP contact"}]}]
+  },
+  {
+    "id":"27","schema_version":2,"name":"DNS Client Configuration","domain":"IP Services","difficulty":"Easy","minutes":20,
+    "objective":"Configure IOS DNS client settings without requiring a DNS appliance.",
+    "tasks":["Enable DNS lookup.","Configure name server 192.0.2.53 and domain ccna.lab.","Create static host server1.ccna.lab to 10.10.20.10."],
+    "topology":{"nodes":[{"name":"R1-EDGE","template":"vios","left":"45%","top":"40%"}],"links":[]},
+    "checks":[{"node":"R1-EDGE","command":"show running-config | include ^ip domain|^ip name-server|^ip host","assertions":[{"type":"contains","value":"ip domain lookup","label":"DNS lookup enabled"},{"type":"contains","value":"ip name-server 192.0.2.53","label":"DNS server 192.0.2.53"},{"type":"contains","value":"ip domain name ccna.lab","label":"Domain ccna.lab"},{"type":"contains","value":"ip host server1.ccna.lab 10.10.20.10","label":"Static DNS host record"}]}]
+  },
+  {
+    "id":"28","schema_version":2,"name":"DTP and Trunk Negotiation","domain":"Network Access","difficulty":"Bonus","minutes":25,
+    "objective":"Understand DTP behavior while producing a deterministic 802.1Q trunk.",
+    "tasks":["Configure SW1 Gi0/1 dynamic desirable and SW2 Gi0/1 dynamic auto.","Use VLAN 99 as native VLAN.","Verify a trunk forms."],
+    "topology":{"nodes":[{"name":"SW1-CORE","template":"viosl2","left":"25%","top":"40%"},{"name":"SW2-DIST","template":"viosl2","left":"65%","top":"40%"}],"links":[{"a":"SW1-CORE","a_if":"Gi0/1","b":"SW2-DIST","b_if":"Gi0/1"}]},
+    "checks":[{"node":"SW1-CORE","command":"show interfaces trunk","assertions":[{"type":"trunk","interface":"Gi0/1","native_vlan":99,"label":"SW1 Gi0/1 trunk native VLAN 99"}]},{"node":"SW2-DIST","command":"show interfaces trunk","assertions":[{"type":"trunk","interface":"Gi0/1","native_vlan":99,"label":"SW2 Gi0/1 trunk native VLAN 99"}]}]
+  },
+  {
+    "id":"29","schema_version":2,"name":"OSPF Multi-Router Deep Dive","domain":"IP Connectivity","difficulty":"Hard","minutes":60,
+    "objective":"Build a four-router single-area OSPF topology and verify exact adjacencies and routes.",
+    "tasks":["Use R1-R2 10.0.12.0/30, R1-R3 10.0.13.0/30, R2-R4 10.0.24.0/30 and R3-R4 10.0.34.0/30.","Create Loopback0 1.1.1.1/32 through 4.4.4.4/32.","Enable OSPF process 1 area 0 and make loopbacks passive.","Verify R1 sees R2 and R3 FULL and learns 4.4.4.4/32."],
+    "topology":{"nodes":[{"name":"R1","template":"vios","left":"15%","top":"20%"},{"name":"R2","template":"vios","left":"55%","top":"20%"},{"name":"R3","template":"vios","left":"15%","top":"65%"},{"name":"R4","template":"vios","left":"55%","top":"65%"}],"links":[{"a":"R1","a_if":"Gi0/0","b":"R2","b_if":"Gi0/0"},{"a":"R1","a_if":"Gi0/1","b":"R3","b_if":"Gi0/0"},{"a":"R2","a_if":"Gi0/1","b":"R4","b_if":"Gi0/0"},{"a":"R3","a_if":"Gi0/1","b":"R4","b_if":"Gi0/1"}]},
+    "checks":[{"node":"R1","command":"show ip ospf neighbor","assertions":[{"type":"ospf_neighbor","router_id":"2.2.2.2","state":"FULL","label":"R2 OSPF FULL"},{"type":"ospf_neighbor","router_id":"3.3.3.3","state":"FULL","label":"R3 OSPF FULL"}]},{"node":"R1","command":"show ip route 4.4.4.4","assertions":[{"type":"route","prefix":"4.4.4.4/32","code":"O","label":"OSPF route 4.4.4.4/32"}]}]
+  },
+  {
+    "id":"30","schema_version":2,"name":"VLAN Multi-Segment","domain":"Network Access","difficulty":"Medium","minutes":45,
+    "objective":"Build three named VLANs and route each segment through dedicated router interfaces.",
+    "tasks":["Create VLAN 10 ENGINEERING, 20 HR and 30 SALES on SW1.","Configure R1 Gi0/0 10.0.0.62/26, Gi0/1 10.0.0.126/26 and Gi0/2 10.0.0.190/26.","Bring all routed interfaces up."],
+    "topology":{"nodes":[{"name":"R1","template":"vios","left":"18%","top":"38%"},{"name":"SW1","template":"viosl2","left":"62%","top":"38%"}],"links":[{"a":"R1","a_if":"Gi0/0","b":"SW1","b_if":"Gi0/0"},{"a":"R1","a_if":"Gi0/1","b":"SW1","b_if":"Gi0/1"},{"a":"R1","a_if":"Gi0/2","b":"SW1","b_if":"Gi0/2"}]},
+    "checks":[{"node":"SW1","command":"show vlan brief","assertions":[{"type":"vlan","id":10,"name":"ENGINEERING","label":"VLAN 10 ENGINEERING"},{"type":"vlan","id":20,"name":"HR","label":"VLAN 20 HR"},{"type":"vlan","id":30,"name":"SALES","label":"VLAN 30 SALES"}]},{"node":"R1","command":"show ip interface brief","assertions":[{"type":"interface_ipv4","interface":"GigabitEthernet0/0","ip":"10.0.0.62","status":"up","protocol":"up","label":"Gi0/0 10.0.0.62 up/up"},{"type":"interface_ipv4","interface":"GigabitEthernet0/1","ip":"10.0.0.126","status":"up","protocol":"up","label":"Gi0/1 10.0.0.126 up/up"},{"type":"interface_ipv4","interface":"GigabitEthernet0/2","ip":"10.0.0.190","status":"up","protocol":"up","label":"Gi0/2 10.0.0.190 up/up"}]}]
+  },
+  {
+    "id":"31","schema_version":2,"name":"ACL Verification Lab","domain":"Security Fundamentals","difficulty":"Medium","minutes":40,
+    "objective":"Build and apply a named extended ACL and validate its forwarding intent.",
+    "tasks":["Address R1 Gi0/0 10.10.10.1/24 and R2 Gi0/0 10.10.10.2/24.","Create USERS-IN on R1 permitting ICMP from R2 to R1 and denying other IP.","Apply USERS-IN inbound on R1 Gi0/0."],
+    "topology":{"nodes":[{"name":"R1","template":"vios","left":"25%","top":"40%"},{"name":"R2","template":"vios","left":"65%","top":"40%"}],"links":[{"a":"R1","a_if":"Gi0/0","b":"R2","b_if":"Gi0/0"}]},
+    "checks":[{"node":"R1","command":"show access-lists USERS-IN","assertions":[{"type":"contains","value":"permit icmp host 10.10.10.2 host 10.10.10.1","label":"ICMP permit ACE"},{"type":"contains","value":"deny ip any any","label":"Explicit deny ACE"}]},{"node":"R1","command":"show running-config interface GigabitEthernet0/0","assertions":[{"type":"contains","value":"ip access-group USERS-IN in","label":"ACL applied inbound on Gi0/0"}]}]
+  },
+  {
+    "id":"32","schema_version":2,"name":"CCNA Mega Lab V2","domain":"Mixed","difficulty":"Hard","minutes":120,
+    "objective":"Complete a multi-domain practical covering switching, routing, services and security with structured validation.",
+    "tasks":["Create VLANs 10 USERS, 20 SERVERS and 99 MANAGEMENT on SW1-CORE.","Build LACP Po1 using Gi0/1 and Gi0/2 between SW1-CORE and SW2-DIST.","Configure OSPF process 10 between R1-EDGE and R2-HQ with R2 router ID 2.2.2.2.","Enable SSH v2 on R1-EDGE using the documented lab credentials.","Configure PAT on R1-EDGE toward R5-ISP."],
+    "topology":{"nodes":[{"name":"R1-EDGE","template":"vios","left":"8%","top":"18%"},{"name":"R2-HQ","template":"vios","left":"34%","top":"18%"},{"name":"R5-ISP","template":"vios","left":"8%","top":"65%"},{"name":"SW1-CORE","template":"viosl2","left":"34%","top":"48%"},{"name":"SW2-DIST","template":"viosl2","left":"65%","top":"48%"},{"name":"SW3-ACCESS","template":"viosl2","left":"65%","top":"78%"}],"links":[{"a":"R1-EDGE","a_if":"Gi0/0","b":"R2-HQ","b_if":"Gi0/0"},{"a":"R1-EDGE","a_if":"Gi0/1","b":"R5-ISP","b_if":"Gi0/0"},{"a":"R2-HQ","a_if":"Gi0/1","b":"SW1-CORE","b_if":"Gi0/0"},{"a":"SW1-CORE","a_if":"Gi0/1","b":"SW2-DIST","b_if":"Gi0/1"},{"a":"SW1-CORE","a_if":"Gi0/2","b":"SW2-DIST","b_if":"Gi0/2"},{"a":"SW2-DIST","a_if":"Gi0/3","b":"SW3-ACCESS","b_if":"Gi0/0"}]},
+    "checks":[{"node":"SW1-CORE","command":"show vlan brief","assertions":[{"type":"vlan","id":10,"name":"USERS","label":"VLAN 10 USERS"},{"type":"vlan","id":20,"name":"SERVERS","label":"VLAN 20 SERVERS"},{"type":"vlan","id":99,"name":"MANAGEMENT","label":"VLAN 99 MANAGEMENT"}]},{"node":"SW1-CORE","command":"show etherchannel summary","assertions":[{"type":"etherchannel","port_channel":"Po1","protocol":"LACP","members":["Gi0/1","Gi0/2"],"label":"Po1 LACP Gi0/1 + Gi0/2"}]},{"node":"R1-EDGE","command":"show ip ospf neighbor","assertions":[{"type":"ospf_neighbor","router_id":"2.2.2.2","state":"FULL","label":"R2-HQ OSPF FULL"}]},{"node":"R1-EDGE","command":"show ip ssh","assertions":[{"type":"ssh_enabled","label":"SSH v2 engine enabled"}]},{"node":"R1-EDGE","command":"show running-config | include ip nat","assertions":[{"type":"contains","value":"ip nat inside","label":"NAT inside"},{"type":"contains","value":"ip nat outside","label":"NAT outside"},{"type":"contains","value":"overload","label":"PAT overload"}]}]
+  }
+]

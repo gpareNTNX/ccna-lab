@@ -22,9 +22,7 @@ class SafeMainWindow(MainWindow):
             self.log("ERROR: " + message)
             self.after(
                 0,
-                lambda msg=message: messagebox.showerror(
-                    "CCNA Lab Builder", msg
-                ),
+                lambda msg=message: messagebox.showerror("CCNA Lab Builder", msg),
             )
 
     @staticmethod
@@ -47,6 +45,9 @@ class SafeMainWindow(MainWindow):
         self.after(0, update)
 
     def _append_lab_access_instructions(self, scenario):
+        topology = scenario.get("topology") or {}
+        nodes = topology.get("nodes", [])
+        links = topology.get("links", [])
         access = (
             "\n\nLAB ACCESS CREDENTIALS — use these exact training values\n"
             f"IOS username: {LAB_IOS_USERNAME}\n"
@@ -55,6 +56,17 @@ class SafeMainWindow(MainWindow):
             "These credentials are intentionally shared for this isolated CCNA lab only. "
             "Do not reuse them on production systems.\n"
         )
+        if topology:
+            access += (
+                "\nSCENARIO V2 TOPOLOGY\n"
+                f"Nodes: {len(nodes)}\n"
+                f"Links: {len(links)}\n"
+            )
+            if links:
+                access += (
+                    "Automatic links require 'Enable experimental API cabling'. "
+                    "If disabled, build the listed links manually in EVE-NG.\n"
+                )
         if scenario.get("id") == "01":
             access += (
                 "\nRequired management values for Scenario 01:\n"
@@ -65,35 +77,40 @@ class SafeMainWindow(MainWindow):
                 "- Console: login local\n"
                 "- VTY 0 4: login local, transport input ssh\n"
             )
-
         self.scenario_text.configure(state="normal")
         self.scenario_text.insert("end", access)
         self.scenario_text.configure(state="disabled")
 
     def select_scenario(self, event=None):
-        """Select a scenario, show access requirements, and set its validation lab."""
         super().select_scenario(event)
         if not self.current_scenario:
             return
         self._append_lab_access_instructions(self.current_scenario)
         lab = self._scenario_lab_path(self.current_scenario)
         self._set_validation_target(lab)
-        self.log("Validator target selected explicitly: " + lab)
+        schema = self.current_scenario.get("schema_version", 1)
+        self.log(f"Validator target selected explicitly: {lab} (scenario schema v{schema})")
 
     def create_scenario_lab(self):
         if not self.current_scenario:
             raise RuntimeError("Select a scenario first.")
         if not self.api:
             raise RuntimeError("Connect to EVE-NG first.")
-
         router_image, switch_image = self._selected_images()
         scenario = self.current_scenario
         name = self._scenario_lab_name(scenario)
-        lab = LabBuilder(self.api, self.log).create(
+        topology = scenario.get("topology") or {}
+        if topology.get("links") and not self.experimental.get():
+            self.log(
+                "WARNING: this scenario defines links but automatic cabling is disabled. "
+                "The lab will be created with the correct node set only."
+            )
+        lab = LabBuilder(self.api, self.log).create_scenario(
             self.folder.get().strip(),
             name,
             router_image,
             switch_image,
+            scenario,
             cable=self.experimental.get(),
         )
         self.log("Scenario lab created: " + lab)
@@ -103,7 +120,7 @@ class SafeMainWindow(MainWindow):
 
 def main():
     root = tk.Tk()
-    root.title("CCNA 200-301 EVE-NG Lab Builder — V4.1")
+    root.title("CCNA 200-301 EVE-NG Lab Builder — Scenario V2")
     root.geometry("1240x860")
     root.minsize(1050, 720)
     try:
