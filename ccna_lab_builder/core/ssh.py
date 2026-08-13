@@ -66,7 +66,6 @@ class SSHConnection:
         if not command:
             return None
 
-        # Common EVE/QEMU form: -serial telnet:127.0.0.1:32769,server,nowait
         match = re.search(
             r"(?:^|\s)-serial\s+(?:telnet|tcp):([^,:\s]+):(\d+)(?:[,\s]|$)",
             command,
@@ -79,7 +78,6 @@ class SSHConnection:
                 "source": "qemu-process",
             }
 
-        # Direct UNIX serial socket.
         match = re.search(r"(?:^|\s)-serial\s+unix:([^,\s]+)", command)
         if match:
             return {
@@ -88,7 +86,6 @@ class SSHConnection:
                 "source": "qemu-process",
             }
 
-        # Modern QEMU can define a socket chardev and attach serial to it.
         serial_ref = re.search(r"(?:^|\s)-serial\s+chardev:([^\s]+)", command)
         serial_id = serial_ref.group(1) if serial_ref else None
         for match in re.finditer(r"(?:^|\s)-chardev\s+socket,([^\s]+)", command):
@@ -202,56 +199,122 @@ class SSHConnection:
 
 
 class CiscoConsole:
+    _PROMPT_RE = re.compile(r"(?m)^[A-Za-z0-9_.:/()\-]+[>#]\s*$")
+
     def __init__(self, channel):
         self.ch = channel
         self.ch.settimeout(1.0)
 
     @staticmethod
     def _clean_telnet(data):
+        """Remove Telnet negotiation bytes while preserving IOS text."""
         out = bytearray()
         i = 0
-        while i < len(data):
-            if data[i] == 255:
-                if i + 2 < len(data):
-                    i += 3
-                else:
-                    break
-            else:
-                out.append(data[i])
+        size = len(data)
+        while i < size:
+            byte = data[i]
+            if byte != 255:  # IAC
+                out.append(byte)
                 i += 1
+                continue
+
+            if i + 1 >= size:
+                break
+
+            command = data[i + 1]
+            if command == 255:  # Escaped literal 0xff
+                out.append(255)
+                i += 2
+                continue
+
+            if command in (251, 252, 253, 254):  # WILL/WONT/DO/DONT + option
+                i += 3
+                continue
+
+            if command == 250:  # SB ... IAC SE
+                i += 2
+                while i + 1 < size:
+                    if data[i] == 255 and data[i + 1] == 240:
+                        i += 2
+                        break
+                    i += 1
+                continue
+
+            i += 2
+
         return out.decode(errors="replace")
 
     def read(self, seconds=1.0):
-        end = time.time() + seconds
+        end = time.monotonic() + seconds
         parts = []
-        while time.time() < end:
+        while time.monotonic() < end:
             try:
                 if self.ch.recv_ready():
                     parts.append(self.ch.recv(65535))
-                    time.sleep(0.05)
+                    time.sleep(0.03)
                 else:
-                    time.sleep(0.05)
+                    time.sleep(0.03)
             except Exception:
                 break
         return self._clean_telnet(b"".join(parts))
+
+    def drain(self, seconds=0.15):
+        """Discard stale prompt/output before issuing a new command."""
+        self.read(seconds)
+
+    def read_until_prompt(self, timeout=6.0, idle_grace=0.15):
+        """Read until an IOS prompt returns instead of relying on a fixed delay."""
+        deadline = time.monotonic() + timeout
+        parts = []
+        last_data = None
+        rendered = ""
+
+        while time.monotonic() < deadline:
+            try:
+                if self.ch.recv_ready():
+                    parts.append(self.ch.recv(65535))
+                    last_data = time.monotonic()
+                    rendered = self._clean_telnet(b"".join(parts))
+                else:
+                    now = time.monotonic()
+                    if (
+                        rendered
+                        and last_data is not None
+                        and now - last_data >= idle_grace
+                        and self._PROMPT_RE.search(rendered)
+                    ):
+                        break
+                    time.sleep(0.03)
+            except Exception:
+                break
+
+        return rendered or self._clean_telnet(b"".join(parts))
 
     def send(self, text):
         self.ch.send((text + "\r").encode())
 
     def bootstrap(self):
+        self.drain()
         self.send("")
         out = self.read(1.5)
         if "initial configuration dialog" in out.lower():
             self.send("no")
-            out += self.read(2)
+            out += self.read(2.0)
         if "press return" in out.lower():
             self.send("")
-            out += self.read(1)
+            out += self.read(1.0)
+        if not self._PROMPT_RE.search(out):
+            self.send("")
+            out += self.read_until_prompt(timeout=4.0)
         return out
 
-    def command(self, command, wait=1.2):
+    def command(self, command, wait=None, timeout=None):
+        """Execute a command and wait for the IOS prompt to return."""
+        if timeout is None:
+            timeout = max(4.0, float(wait or 0.0))
+        self.drain()
         self.send(command)
-        return self.read(wait)
+        return self.read_until_prompt(timeout=timeout)
 
     def configure(self, commands):
         self.bootstrap()
@@ -259,7 +322,7 @@ class CiscoConsole:
         self.command("configure terminal")
         output = []
         for cmd in commands:
-            output.append(self.command(cmd, 0.25))
-        output.append(self.command("end"))
-        output.append(self.command("write memory", 1.5))
+            output.append(self.command(cmd, timeout=4.0))
+        output.append(self.command("end", timeout=4.0))
+        output.append(self.command("write memory", timeout=8.0))
         return "\n".join(output)
