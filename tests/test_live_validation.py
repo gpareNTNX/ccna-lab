@@ -47,6 +47,22 @@ class DelayedAPI:
 
 
 class LiveValidationConsoleTests(unittest.TestCase):
+    def test_port_from_native_telnet_url(self):
+        self.assertEqual(
+            LiveValidator._port_from_url("telnet://127.0.0.1:32769"),
+            32769,
+        )
+
+    def test_port_from_html5_guacamole_url(self):
+        url = (
+            "/html5/#/client/MzI3NjkAYwBteXNxbA=="
+            "?token=F1666351184206978A3B4C5A78E5DA6225CA557FDEDCC7199962BB1537961091"
+        )
+        self.assertEqual(LiveValidator._port_from_url(url), 32769)
+
+    def test_invalid_html5_url_returns_none(self):
+        self.assertIsNone(LiveValidator._port_from_url("/html5/#/client/not-base64!"))
+
     def test_console_port_from_node_list_url(self):
         api = FakeAPI()
         validator = LiveValidator(api, ssh=None)
