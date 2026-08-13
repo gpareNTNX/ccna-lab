@@ -1,16 +1,13 @@
+import re
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
 
+from ccna_lab_builder.core.builder import LabBuilder
 from ccna_lab_builder.gui.main import MainWindow
 
 
 class SafeMainWindow(MainWindow):
-    """Main window with thread-safe Tkinter error reporting.
-
-    Python clears the exception target at the end of an ``except`` block.
-    Therefore a Tk callback scheduled with ``after()`` must capture the
-    rendered message, not the exception variable itself.
-    """
+    """Main window with thread-safe Tkinter error reporting and safer lab selection."""
 
     def _safe_run(self, func):
         try:
@@ -24,6 +21,36 @@ class SafeMainWindow(MainWindow):
                     "CCNA Lab Builder", msg
                 ),
             )
+
+    @staticmethod
+    def _scenario_lab_name(scenario):
+        slug = re.sub(r"[^A-Z0-9]+", "-", scenario["name"].upper()).strip("-")
+        return f"CCNA-{scenario['id']}-{slug}"
+
+    def create_scenario_lab(self):
+        if not self.current_scenario:
+            raise RuntimeError("Select a scenario first.")
+        if not self.api:
+            raise RuntimeError("Connect to EVE-NG first.")
+
+        router_image, switch_image = self._selected_images()
+        scenario = self.current_scenario
+        name = self._scenario_lab_name(scenario)
+        lab = LabBuilder(self.api, self.log).create(
+            self.folder.get().strip(),
+            name,
+            router_image,
+            switch_image,
+            cable=self.experimental.get(),
+        )
+        self.log("Scenario lab created: " + lab)
+        self.log("Validator target updated to: " + lab)
+
+        def select_validation_lab():
+            self.validation_lab.delete(0, "end")
+            self.validation_lab.insert(0, lab)
+
+        self.after(0, select_validation_lab)
 
 
 def main():
