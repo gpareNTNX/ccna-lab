@@ -17,12 +17,8 @@ class LiveValidator:
         return {v["name"]: (int(k), v) for k, v in data.items()}
 
     @staticmethod
-    def _native_endpoint_from_url(url):
-        """Return (host, port) only for a real native console URL.
-
-        HTML5/Guacamole client identifiers are not raw Telnet ports and must
-        never be opened directly through SSH port forwarding.
-        """
+    def _native_backend_from_url(url):
+        """Return a TCP backend only for a real native console URL."""
         if not isinstance(url, str):
             return None
 
@@ -35,24 +31,62 @@ class LiveValidator:
             return None
         if not 1 <= parsed.port <= 65535:
             return None
-        return parsed.hostname, parsed.port
+        return {
+            "kind": "tcp",
+            "host": parsed.hostname,
+            "port": parsed.port,
+            "source": "eve-api",
+        }
+
+    @staticmethod
+    def _native_endpoint_from_url(url):
+        """Backward-compatible helper retained for existing tests/callers."""
+        backend = LiveValidator._native_backend_from_url(url)
+        if not backend:
+            return None
+        return backend["host"], backend["port"]
 
     @staticmethod
     def _is_html5_url(url):
         return isinstance(url, str) and ("/html5/" in url or "/client/" in url)
 
-    def _console_endpoint(self, lab, node_id, node_info=None, attempts=12, delay=1.0):
-        """Return EVE-NG's raw native console endpoint for a node."""
+    def _qemu_backend(self, node_info):
+        if not self.ssh or not isinstance(node_info, dict):
+            return None
+        uuid = node_info.get("uuid")
+        if not uuid:
+            return None
+        backend = self.ssh.discover_qemu_console(uuid)
+        if backend:
+            if backend["kind"] == "tcp":
+                self.log(
+                    f"QEMU console discovered for {node_info.get('name', uuid)}: "
+                    f"{backend['host']}:{backend['port']}"
+                )
+            else:
+                self.log(
+                    f"QEMU UNIX console discovered for {node_info.get('name', uuid)}: "
+                    f"{backend['path']}"
+                )
+        return backend
+
+    def _console_backend(self, lab, node_id, node_info=None, attempts=6, delay=1.0):
+        """Resolve a usable console backend from EVE API or the QEMU process."""
         candidate = node_info or {}
         native_session_refreshed = False
 
         for attempt in range(1, attempts + 1):
-            url = candidate.get("url")
-            endpoint = self._native_endpoint_from_url(url)
-            if endpoint:
-                return endpoint
+            backend = self._native_backend_from_url(candidate.get("url"))
+            if backend:
+                return backend
 
-            if self._is_html5_url(url) and not native_session_refreshed:
+            # HTML5 URLs contain a Guacamole/MySQL connection identifier, not
+            # a raw Telnet port. Inspect the running QEMU process instead.
+            qemu_backend = self._qemu_backend(candidate)
+            if qemu_backend:
+                return qemu_backend
+
+            if self._is_html5_url(candidate.get("url")) and not native_session_refreshed:
                 self.log(
                     f"Node {node_id}: HTML5 console URL detected; "
                     "requesting native EVE-NG console mode..."
@@ -61,31 +95,51 @@ class LiveValidator:
                 native_session_refreshed = True
 
             nodes = self.api.nodes(lab).get("data", {})
-            candidate = nodes.get(str(node_id), {})
-            endpoint = self._native_endpoint_from_url(candidate.get("url"))
-            if endpoint:
-                return endpoint
+            candidate = nodes.get(str(node_id), candidate)
+            backend = self._native_backend_from_url(candidate.get("url"))
+            if backend:
+                return backend
+
+            qemu_backend = self._qemu_backend(candidate)
+            if qemu_backend:
+                return qemu_backend
 
             detail = self.api.node(lab, node_id).get("data", {})
-            endpoint = self._native_endpoint_from_url(detail.get("url"))
-            if endpoint:
-                return endpoint
+            backend = self._native_backend_from_url(detail.get("url"))
+            if backend:
+                return backend
+
+            qemu_backend = self._qemu_backend(detail)
+            if qemu_backend:
+                return qemu_backend
 
             if attempt < attempts:
                 if attempt == 1:
                     self.log(
-                        f"Node {node_id}: waiting for EVE-NG to expose a native console port..."
+                        f"Node {node_id}: waiting for EVE-NG/QEMU console backend..."
                     )
                 time.sleep(delay)
 
         status = candidate.get("status", "unknown")
         console = candidate.get("console", "unknown")
         url = candidate.get("url") or "none"
+        uuid = candidate.get("uuid") or "none"
         raise RuntimeError(
-            f"No native console endpoint available for node {node_id} after {attempts} attempts. "
-            f"EVE status={status}, console={console}, url={url}. "
-            "The validator requires EVE-NG native console mode, not an HTML5/Guacamole client URL."
+            f"No usable console backend available for node {node_id} after {attempts} attempts. "
+            f"EVE status={status}, console={console}, uuid={uuid}, url={url}. "
+            "The API did not expose a native console and no matching QEMU serial backend was found."
         )
+
+    def _console_endpoint(self, lab, node_id, node_info=None, attempts=6, delay=1.0):
+        """Backward-compatible native TCP endpoint helper."""
+        backend = self._console_backend(
+            lab, node_id, node_info=node_info, attempts=attempts, delay=delay
+        )
+        if backend.get("kind") != "tcp":
+            raise RuntimeError(
+                f"Console backend for node {node_id} is {backend.get('kind')}, not TCP."
+            )
+        return backend["host"], backend["port"]
 
     def run_check(self, lab, check):
         nodes = self._node_map(lab)
@@ -93,10 +147,19 @@ class LiveValidator:
             raise RuntimeError(f"Node {check['node']} not found.")
 
         node_id, node_info = nodes[check["node"]]
-        host, port = self._console_endpoint(lab, node_id, node_info=node_info)
-        self.log(f"{check['node']}: native console {host}:{port}")
+        backend = self._console_backend(lab, node_id, node_info=node_info)
+        if backend["kind"] == "tcp":
+            self.log(
+                f"{check['node']}: console {backend['host']}:{backend['port']} "
+                f"({backend.get('source', 'unknown')})"
+            )
+        else:
+            self.log(
+                f"{check['node']}: console {backend['path']} "
+                f"({backend.get('source', 'unknown')})"
+            )
 
-        channel = self.ssh.open_eve_console(port, target_host=host)
+        channel = self.ssh.open_console_backend(backend)
         try:
             console = CiscoConsole(channel)
             console.bootstrap()
