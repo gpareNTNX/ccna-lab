@@ -21,6 +21,7 @@ class FakeSession:
         self.last_kwargs = None
         self.login_count = 0
         self.request_count = 0
+        self.requests = []
         self.request_responses = list(request_responses or [])
 
     def post(self, url, **kwargs):
@@ -34,6 +35,7 @@ class FakeSession:
 
     def request(self, method, url, **kwargs):
         self.request_count += 1
+        self.requests.append((method, url, kwargs))
         if self.request_responses:
             return self.request_responses.pop(0)
         return FakeResponse()
@@ -99,6 +101,43 @@ class EVEApiLoginTests(unittest.TestCase):
 
         self.assertEqual(api.session.login_count, 1)
         self.assertEqual(api.session.request_count, 2)
+
+    def test_ensure_folder_creates_missing_path_recursively(self):
+        missing_parent = FakeResponse(
+            404,
+            {"code": 404, "status": "fail", "message": "Requested folder does not exist (60008)."},
+        )
+        created_parent = FakeResponse(
+            200,
+            {"code": 200, "status": "success", "message": "Folder has been created (60014)."},
+        )
+        missing_child = FakeResponse(
+            404,
+            {"code": 404, "status": "fail", "message": "Requested folder does not exist (60008)."},
+        )
+        created_child = FakeResponse(
+            200,
+            {"code": 200, "status": "success", "message": "Folder has been created (60014)."},
+        )
+
+        api = EVEApi("eve.local", "admin", "secret")
+        api.session = FakeSession(
+            [missing_parent, created_parent, missing_child, created_child]
+        )
+
+        result = api.ensure_folder("/CCNA-200-301/Scenarios")
+
+        self.assertEqual(result, "/CCNA-200-301/Scenarios")
+        self.assertEqual(api.session.request_count, 4)
+        self.assertEqual(api.session.requests[1][0], "POST")
+        self.assertEqual(
+            api.session.requests[1][2]["json"],
+            {"path": "/", "name": "CCNA-200-301"},
+        )
+        self.assertEqual(
+            api.session.requests[3][2]["json"],
+            {"path": "/CCNA-200-301", "name": "Scenarios"},
+        )
 
 
 if __name__ == "__main__":
