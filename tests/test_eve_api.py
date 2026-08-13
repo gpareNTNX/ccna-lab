@@ -16,18 +16,23 @@ class FakeResponse:
 
 
 class FakeSession:
-    def __init__(self, request_responses=None):
+    def __init__(self, request_responses=None, login_responses=None):
         self.last_url = None
         self.last_kwargs = None
         self.login_count = 0
         self.request_count = 0
         self.requests = []
+        self.login_payloads = []
         self.request_responses = list(request_responses or [])
+        self.login_responses = list(login_responses or [])
 
     def post(self, url, **kwargs):
         self.last_url = url
         self.last_kwargs = kwargs
         self.login_count += 1
+        self.login_payloads.append(json.loads(kwargs["data"]))
+        if self.login_responses:
+            return self.login_responses.pop(0)
         return FakeResponse(
             200,
             {"status": "success", "code": 200, "message": "User logged in"},
@@ -42,12 +47,15 @@ class FakeSession:
 
 
 class EVEApiLoginTests(unittest.TestCase):
-    def test_community_login_payload(self):
+    def test_community_login_requests_native_console_mode(self):
         api = EVEApi("eve.local", "admin", "secret", https=False)
         api.session = FakeSession()
         api.login()
         payload = json.loads(api.session.last_kwargs["data"])
-        self.assertEqual(payload, {"username": "admin", "password": "secret"})
+        self.assertEqual(
+            payload,
+            {"username": "admin", "password": "secret", "html5": "0"},
+        )
         self.assertEqual(api.session.last_url, "http://eve.local/api/auth/login")
         self.assertEqual(
             api.session.last_kwargs["headers"]["Content-Type"],
@@ -61,6 +69,28 @@ class EVEApiLoginTests(unittest.TestCase):
         payload = json.loads(api.session.last_kwargs["data"])
         self.assertEqual(payload["html5"], "0")
         self.assertEqual(api.session.last_url, "https://eve.local/api/auth/login")
+
+    def test_community_falls_back_if_html5_parameter_is_rejected(self):
+        rejected = FakeResponse(
+            400,
+            {
+                "status": "fail",
+                "code": 400,
+                "message": "Unsupported parameter html5",
+            },
+        )
+        success = FakeResponse(
+            200,
+            {"status": "success", "code": 200, "message": "User logged in"},
+        )
+        api = EVEApi("eve.local", "admin", "secret", https=False)
+        api.session = FakeSession(login_responses=[rejected, success])
+
+        api.login()
+
+        self.assertEqual(api.session.login_count, 2)
+        self.assertEqual(api.session.login_payloads[0]["html5"], "0")
+        self.assertNotIn("html5", api.session.login_payloads[1])
 
     def test_412_session_timeout_reauthenticates_once(self):
         expired = FakeResponse(
