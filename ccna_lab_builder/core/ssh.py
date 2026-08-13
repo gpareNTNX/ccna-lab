@@ -1,6 +1,8 @@
 import time
+
 import paramiko
 from scp import SCPClient
+
 
 class SSHConnection:
     def __init__(self, host, username, password, port=22):
@@ -14,9 +16,13 @@ class SSHConnection:
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.client.connect(
-            self.host, port=self.port, username=self.username,
-            password=self.password, timeout=12,
-            look_for_keys=False, allow_agent=False,
+            self.host,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            timeout=12,
+            look_for_keys=False,
+            allow_agent=False,
         )
         return self.exec("hostname")[0].strip()
 
@@ -44,15 +50,48 @@ class SSHConnection:
         )
         return [x.strip() for x in out.splitlines() if x.strip()]
 
-    def open_eve_console(self, port):
+    def console_listener_info(self, port):
+        """Return listening TCP sockets on the EVE host for a console port."""
+        port = int(port)
+        out, _ = self.exec(
+            f"ss -ltnH 2>/dev/null | awk '$4 ~ /:{port}$/ {{print $4}}'"
+        )
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
+    def open_eve_console(self, port, target_host="127.0.0.1"):
         if not self.client:
             raise RuntimeError("SSH is not connected.")
+
+        port = int(port)
         transport = self.client.get_transport()
-        return transport.open_channel(
-            "direct-tcpip",
-            ("127.0.0.1", int(port)),
-            ("127.0.0.1", 0),
-        )
+        if transport is None or not transport.is_active():
+            raise RuntimeError("SSH transport is not active.")
+
+        targets = []
+        for host in (target_host, "127.0.0.1", self.host):
+            if host and host not in targets:
+                targets.append(host)
+
+        last_error = None
+        for host in targets:
+            try:
+                return transport.open_channel(
+                    "direct-tcpip",
+                    (host, port),
+                    ("127.0.0.1", 0),
+                )
+            except paramiko.ssh_exception.ChannelException as exc:
+                last_error = exc
+
+        listeners = self.console_listener_info(port)
+        listener_text = ", ".join(listeners) if listeners else "none"
+        raise RuntimeError(
+            f"EVE console TCP connection failed for port {port}. "
+            f"Tried targets: {', '.join(targets)}. "
+            f"Listening sockets reported by EVE-NG: {listener_text}. "
+            f"SSH channel error: {last_error}"
+        ) from last_error
+
 
 class CiscoConsole:
     def __init__(self, channel):
