@@ -199,7 +199,7 @@ class SSHConnection:
 
 
 class CiscoConsole:
-    _PROMPT_RE = re.compile(r"(?m)^[A-Za-z0-9_.:/()\-]+[>#]\s*$")
+    _PROMPT_RE = re.compile(r"(?m)^\s*[A-Za-z0-9_.:/()\-]+[>#]\s*$")
 
     def __init__(self, channel):
         self.ch = channel
@@ -299,19 +299,62 @@ class CiscoConsole:
         self.ch.send((text + "\r").encode())
 
     def bootstrap(self):
+        """Handle the common IOS first-boot prompts without assuming IOS is ready yet."""
         self.drain()
         self.send("")
         out = self.read(1.5)
-        if "initial configuration dialog" in out.lower():
+        lower = out.lower()
+        if "initial configuration dialog" in lower:
             self.send("no")
             out += self.read(2.0)
-        if "press return" in out.lower():
+        if "press return" in lower:
             self.send("")
             out += self.read(1.0)
-        if not self._PROMPT_RE.search(out):
-            self.send("")
-            out += self.read_until_prompt(timeout=4.0)
         return out
+
+    def wait_for_prompt(self, timeout=90.0, pulse=2.0):
+        """Wait for IOS itself to finish booting and expose an EXEC prompt.
+
+        EVE/QEMU can expose the serial backend well before IOS has completed its
+        boot sequence. Keep the console session open, periodically press Enter,
+        and handle the initial-configuration dialog until Router>/Router# (or a
+        configured hostname) becomes available.
+        """
+        deadline = time.monotonic() + timeout
+        transcript = []
+
+        while time.monotonic() < deadline:
+            self.send("")
+            remaining = max(0.05, deadline - time.monotonic())
+            output = self.read_until_prompt(timeout=min(pulse, remaining))
+            if output:
+                transcript.append(output)
+
+            prompt = self._last_prompt(output)
+            if prompt:
+                return prompt
+
+            recent = "\n".join(transcript[-3:]).lower()
+            if "initial configuration dialog" in recent:
+                self.send("no")
+                response = self.read(min(2.0, max(0.05, deadline - time.monotonic())))
+                if response:
+                    transcript.append(response)
+                prompt = self._last_prompt(response)
+                if prompt:
+                    return prompt
+
+            if "press return" in recent:
+                self.send("")
+
+        tail = "\n".join(transcript[-3:]).strip()
+        if len(tail) > 1200:
+            tail = tail[-1200:]
+        detail = tail or "<no IOS console text received>"
+        raise RuntimeError(
+            f"IOS console backend is connected, but no IOS EXEC prompt appeared within "
+            f"{int(timeout)} seconds. Last console output: {detail}"
+        )
 
     def current_prompt(self, timeout=4.0):
         """Ask IOS for its current prompt and return the final prompt string."""
@@ -320,15 +363,15 @@ class CiscoConsole:
         output = self.read_until_prompt(timeout=timeout)
         return self._last_prompt(output)
 
-    def ensure_privileged(self, timeout=5.0):
-        """Ensure the console is at privileged EXEC (hostname#) before show commands."""
-        prompt = self.current_prompt(timeout=timeout)
+    def ensure_privileged(self, timeout=90.0):
+        """Wait for IOS readiness, then ensure privileged EXEC (hostname#)."""
+        prompt = self.current_prompt(timeout=min(4.0, timeout))
         if not prompt:
-            raise RuntimeError("Could not determine the IOS prompt before validation.")
+            prompt = self.wait_for_prompt(timeout=timeout)
 
         if "(config" in prompt.lower():
-            output = self.command("end", timeout=timeout)
-            prompt = self._last_prompt(output) or self.current_prompt(timeout=timeout)
+            output = self.command("end", timeout=5.0)
+            prompt = self._last_prompt(output) or self.current_prompt(timeout=5.0)
 
         if prompt and prompt.endswith(">"):
             self.drain()
@@ -341,7 +384,7 @@ class CiscoConsole:
                 )
             prompt = self._last_prompt(output)
             if not prompt:
-                output += self.read_until_prompt(timeout=timeout)
+                output += self.read_until_prompt(timeout=5.0)
                 prompt = self._last_prompt(output)
 
         if not prompt or not prompt.endswith("#") or "(config" in prompt.lower():
