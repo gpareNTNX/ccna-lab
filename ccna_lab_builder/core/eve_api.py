@@ -61,21 +61,40 @@ class EVEApi:
             )
         return data
 
-    def login(self):
-        # EVE-NG Community expects the Web/API account (commonly admin), not
-        # the Linux SSH account (commonly root). EVE-NG Pro additionally
-        # documents html5=0 for API login.
-        payload = {"username": self.username, "password": self.password}
-        if self.base.startswith("https://"):
-            payload["html5"] = "0"
-
+    def _login_attempt(self, payload):
         response = self.session.post(
             self.base + "/api/auth/login",
             data=json.dumps(payload),
             headers={"Content-Type": "application/json"},
             timeout=15,
         )
-        data = self._decode_response(response)
+        return response, self._decode_response(response)
+
+    def login(self):
+        """Authenticate and request native-console URLs from EVE-NG.
+
+        EVE-NG Pro documents ``html5=0`` for native console mode. Recent
+        Community builds also accept the console preference and may otherwise
+        return Guacamole/HTML5 client URLs instead of the raw dynamic Telnet
+        endpoint needed by the live validator.
+        """
+        payload = {
+            "username": self.username,
+            "password": self.password,
+            "html5": "0",
+        }
+        response, data = self._login_attempt(payload)
+
+        # Compatibility fallback for older Community builds that explicitly
+        # reject the html5 field. Do not hide ordinary bad-credential errors.
+        if (
+            not self.base.startswith("https://")
+            and (not response.ok or data.get("status") != "success")
+        ):
+            detail = (data.get("message") or response.text or "").lower()
+            if "html5" in detail or "unknown parameter" in detail or "unsupported parameter" in detail:
+                payload.pop("html5", None)
+                response, data = self._login_attempt(payload)
 
         if not response.ok or data.get("status") != "success":
             detail = data.get("message") or response.text.strip() or "No response body"
