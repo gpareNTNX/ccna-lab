@@ -92,7 +92,11 @@ class EVEApi:
             and (not response.ok or data.get("status") != "success")
         ):
             detail = (data.get("message") or response.text or "").lower()
-            if "html5" in detail or "unknown parameter" in detail or "unsupported parameter" in detail:
+            if (
+                "html5" in detail
+                or "unknown parameter" in detail
+                or "unsupported parameter" in detail
+            ):
                 payload.pop("html5", None)
                 response, data = self._login_attempt(payload)
 
@@ -119,12 +123,7 @@ class EVEApi:
         return self.request("POST", "/folders", json={"path": parent, "name": name})
 
     def ensure_folder(self, path):
-        """Create a folder path recursively when it does not already exist.
-
-        EVE-NG requires the parent folder to exist before POST /labs. This
-        helper walks the requested path from root and creates only missing
-        components using the documented POST /folders API.
-        """
+        """Create a folder path recursively when it does not already exist."""
         parts = [part for part in path.strip().split("/") if part]
         if not parts:
             return "/"
@@ -171,6 +170,16 @@ class EVEApi:
 
     def node(self, lab, node_id):
         return self.request("GET", f"/labs/{self._path(lab)}/nodes/{node_id}")
+
+    def start_node(self, lab, node_id):
+        """Start one node using EVE-NG's documented lifecycle endpoint."""
+        return self.request("GET", f"/labs/{self._path(lab)}/nodes/{node_id}/start")
+
+    def stop_node(self, lab, node_id):
+        return self.request("GET", f"/labs/{self._path(lab)}/nodes/{node_id}/stop")
+
+    def wipe_node(self, lab, node_id):
+        return self.request("GET", f"/labs/{self._path(lab)}/nodes/{node_id}/wipe")
 
     def interfaces(self, lab, node_id):
         return self.request("GET", f"/labs/{self._path(lab)}/nodes/{node_id}/interfaces")
