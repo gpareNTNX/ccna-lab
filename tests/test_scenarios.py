@@ -5,8 +5,8 @@ from ccna_lab_builder.core.validator import Validator
 
 
 class ScenarioTests(unittest.TestCase):
-    def test_has_32_labs(self):
-        self.assertEqual(len(ScenarioCatalog().all()), 32)
+    def test_has_37_labs(self):
+        self.assertEqual(len(ScenarioCatalog().all()), 37)
 
     def test_ids_unique(self):
         ids = [x["id"] for x in ScenarioCatalog().all()]
