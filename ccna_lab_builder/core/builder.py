@@ -1,5 +1,6 @@
 from ccna_lab_builder.core.topology import NODES, LINKS, all_node_payloads
 
+
 class LabBuilder:
     def __init__(self, api, log=print):
         self.api = api
@@ -27,6 +28,13 @@ class LabBuilder:
         )
 
     def create(self, folder, name, router_image, switch_image, cable=False):
+        folder = folder.strip() or "/"
+        if not folder.startswith("/"):
+            folder = "/" + folder
+
+        self.log(f"Ensuring EVE-NG folder exists: {folder}")
+        folder = self.api.ensure_folder(folder)
+
         self.log(f"Creating lab {folder}/{name}...")
         self.api.create_lab(folder, name)
         lab = self.api.lab_path(folder, name)
