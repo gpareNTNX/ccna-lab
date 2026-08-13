@@ -213,7 +213,7 @@ class CiscoConsole:
         size = len(data)
         while i < size:
             byte = data[i]
-            if byte != 255:  # IAC
+            if byte != 255:
                 out.append(byte)
                 i += 1
                 continue
@@ -222,16 +222,16 @@ class CiscoConsole:
                 break
 
             command = data[i + 1]
-            if command == 255:  # Escaped literal 0xff
+            if command == 255:
                 out.append(255)
                 i += 2
                 continue
 
-            if command in (251, 252, 253, 254):  # WILL/WONT/DO/DONT + option
+            if command in (251, 252, 253, 254):
                 i += 3
                 continue
 
-            if command == 250:  # SB ... IAC SE
+            if command == 250:
                 i += 2
                 while i + 1 < size:
                     if data[i] == 255 and data[i + 1] == 240:
@@ -243,6 +243,11 @@ class CiscoConsole:
             i += 2
 
         return out.decode(errors="replace")
+
+    @classmethod
+    def _last_prompt(cls, text):
+        matches = list(cls._PROMPT_RE.finditer(str(text or "")))
+        return matches[-1].group(0).strip() if matches else None
 
     def read(self, seconds=1.0):
         end = time.monotonic() + seconds
@@ -308,6 +313,43 @@ class CiscoConsole:
             out += self.read_until_prompt(timeout=4.0)
         return out
 
+    def current_prompt(self, timeout=4.0):
+        """Ask IOS for its current prompt and return the final prompt string."""
+        self.drain()
+        self.send("")
+        output = self.read_until_prompt(timeout=timeout)
+        return self._last_prompt(output)
+
+    def ensure_privileged(self, timeout=5.0):
+        """Ensure the console is at privileged EXEC (hostname#) before show commands."""
+        prompt = self.current_prompt(timeout=timeout)
+        if not prompt:
+            raise RuntimeError("Could not determine the IOS prompt before validation.")
+
+        if "(config" in prompt.lower():
+            output = self.command("end", timeout=timeout)
+            prompt = self._last_prompt(output) or self.current_prompt(timeout=timeout)
+
+        if prompt and prompt.endswith(">"):
+            self.drain()
+            self.send("enable")
+            output = self.read(1.0)
+            if "password:" in output.lower():
+                raise RuntimeError(
+                    "IOS enable password is required. Enter privileged EXEC manually "
+                    "or remove the enable password for this training scenario."
+                )
+            prompt = self._last_prompt(output)
+            if not prompt:
+                output += self.read_until_prompt(timeout=timeout)
+                prompt = self._last_prompt(output)
+
+        if not prompt or not prompt.endswith("#") or "(config" in prompt.lower():
+            raise RuntimeError(
+                f"Validator could not reach privileged EXEC mode. Current prompt: {prompt or 'unknown'}"
+            )
+        return prompt
+
     def command(self, command, wait=None, timeout=None):
         """Execute a command and wait for the IOS prompt to return."""
         if timeout is None:
@@ -318,7 +360,7 @@ class CiscoConsole:
 
     def configure(self, commands):
         self.bootstrap()
-        self.command("enable")
+        self.ensure_privileged()
         self.command("configure terminal")
         output = []
         for cmd in commands:
