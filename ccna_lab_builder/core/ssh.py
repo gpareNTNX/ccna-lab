@@ -1,3 +1,5 @@
+import re
+import shlex
 import time
 
 import paramiko
@@ -58,6 +60,78 @@ class SSHConnection:
         )
         return [line.strip() for line in out.splitlines() if line.strip()]
 
+    @staticmethod
+    def parse_qemu_console_backend(command):
+        """Extract a QEMU serial-console backend from a running command line."""
+        if not command:
+            return None
+
+        # Common EVE/QEMU form: -serial telnet:127.0.0.1:32769,server,nowait
+        match = re.search(
+            r"(?:^|\s)-serial\s+(?:telnet|tcp):([^,:\s]+):(\d+)(?:[,\s]|$)",
+            command,
+        )
+        if match:
+            return {
+                "kind": "tcp",
+                "host": match.group(1),
+                "port": int(match.group(2)),
+                "source": "qemu-process",
+            }
+
+        # Direct UNIX serial socket.
+        match = re.search(r"(?:^|\s)-serial\s+unix:([^,\s]+)", command)
+        if match:
+            return {
+                "kind": "unix",
+                "path": match.group(1),
+                "source": "qemu-process",
+            }
+
+        # Modern QEMU can define a socket chardev and attach serial to it.
+        serial_ref = re.search(r"(?:^|\s)-serial\s+chardev:([^\s]+)", command)
+        serial_id = serial_ref.group(1) if serial_ref else None
+        for match in re.finditer(r"(?:^|\s)-chardev\s+socket,([^\s]+)", command):
+            options = match.group(1)
+            values = {}
+            for item in options.split(","):
+                if "=" in item:
+                    key, value = item.split("=", 1)
+                    values[key] = value
+            if serial_id and values.get("id") != serial_id:
+                continue
+            if values.get("host") and values.get("port", "").isdigit():
+                return {
+                    "kind": "tcp",
+                    "host": values["host"],
+                    "port": int(values["port"]),
+                    "source": "qemu-process",
+                }
+            if values.get("path"):
+                return {
+                    "kind": "unix",
+                    "path": values["path"],
+                    "source": "qemu-process",
+                }
+
+        return None
+
+    def discover_qemu_console(self, uuid):
+        """Find the real serial backend from the running QEMU process UUID."""
+        if not uuid:
+            return None
+        command = (
+            "ps -eo args= | grep -F -- "
+            + shlex.quote(str(uuid))
+            + " | grep -E '[q]emu-system|[q]emu-kvm' | head -n 1"
+        )
+        out, _ = self.exec(command)
+        qemu_command = out.strip()
+        backend = self.parse_qemu_console_backend(qemu_command)
+        if backend:
+            backend["uuid"] = str(uuid)
+        return backend
+
     def open_eve_console(self, port, target_host="127.0.0.1"):
         if not self.client:
             raise RuntimeError("SSH is not connected.")
@@ -91,6 +165,40 @@ class SSHConnection:
             f"Listening sockets reported by EVE-NG: {listener_text}. "
             f"SSH channel error: {last_error}"
         ) from last_error
+
+    def open_unix_console(self, path):
+        """Bridge a remote UNIX serial socket over an SSH session channel."""
+        if not self.client:
+            raise RuntimeError("SSH is not connected.")
+        transport = self.client.get_transport()
+        if transport is None or not transport.is_active():
+            raise RuntimeError("SSH transport is not active.")
+
+        tool, _ = self.exec("command -v socat || command -v nc || true")
+        tool = tool.strip().splitlines()[0] if tool.strip() else ""
+        if not tool:
+            raise RuntimeError(
+                "QEMU uses a UNIX console socket, but neither socat nor nc is available on EVE-NG."
+            )
+
+        channel = transport.open_session()
+        channel.set_combine_stderr(True)
+        if tool.endswith("socat"):
+            command = "exec socat - " + shlex.quote("UNIX-CONNECT:" + path)
+        else:
+            command = "exec nc -U " + shlex.quote(path)
+        channel.exec_command(command)
+        return channel
+
+    def open_console_backend(self, backend):
+        kind = backend.get("kind") if isinstance(backend, dict) else None
+        if kind == "tcp":
+            return self.open_eve_console(
+                backend["port"], target_host=backend.get("host", "127.0.0.1")
+            )
+        if kind == "unix":
+            return self.open_unix_console(backend["path"])
+        raise RuntimeError(f"Unsupported EVE console backend: {backend}")
 
 
 class CiscoConsole:
