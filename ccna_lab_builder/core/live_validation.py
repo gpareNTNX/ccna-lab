@@ -75,9 +75,6 @@ class LiveValidator:
         if not backend:
             return None
 
-        # Without SSH we cannot verify the remote listener; retain legacy/test
-        # behavior. In the real desktop app, never trust a stale EVE URL unless
-        # EVE itself reports a TCP listener for that port.
         if not self.ssh:
             return backend
 
@@ -92,32 +89,21 @@ class LiveValidator:
         return None
 
     def _console_backend(self, lab, node_id, node_info=None, attempts=15, delay=1.0):
-        """Resolve a usable backend and start the node when necessary.
-
-        A configured EVE node may have a console URL even while its QEMU
-        process is not running. Therefore process discovery is authoritative;
-        native API URLs are accepted only when their TCP listener really exists.
-        """
+        """Resolve a usable backend and start the node when necessary."""
         candidate = node_info or {}
         native_session_refreshed = False
         start_attempted = False
         start_error = None
 
         for attempt in range(1, attempts + 1):
-            # 1. Prefer the backend of the running QEMU process. This avoids
-            # stale or Guacamole-derived API console URLs.
             qemu_backend = self._qemu_backend(candidate)
             if qemu_backend:
                 return qemu_backend
 
-            # 2. A native API endpoint is usable only if the socket exists.
             api_backend = self._api_tcp_backend_if_live(candidate)
             if api_backend:
                 return api_backend
 
-            # 3. If no process/socket exists, ensure the scenario node is
-            # actually started. START ALL in the Master tab targets the master
-            # lab, not a freshly-created scenario lab.
             if not start_attempted:
                 try:
                     self.log(
@@ -138,7 +124,6 @@ class LiveValidator:
                 self.api.login()
                 native_session_refreshed = True
 
-            # Refresh EVE data after start/re-login.
             nodes = self.api.nodes(lab).get("data", {})
             candidate = nodes.get(str(node_id), candidate)
 
@@ -214,9 +199,17 @@ class LiveValidator:
         try:
             console = CiscoConsole(channel)
             console.bootstrap()
-            console.command("terminal length 0")
-            output = console.command(check["command"], wait=1.8)
-            return self.validator.validate_output(check, output)
+            console.command("terminal length 0", timeout=5.0)
+            output = console.command(check["command"], timeout=8.0)
+            result = self.validator.validate_output(check, output)
+            if result.passed:
+                self.log(f"{check['node']}: validation PASS")
+            else:
+                self.log(
+                    f"{check['node']}: validation FAIL; missing: "
+                    + ", ".join(result.missing)
+                )
+            return result
         finally:
             channel.close()
 
