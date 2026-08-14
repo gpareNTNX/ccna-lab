@@ -2,7 +2,7 @@
 
 A desktop GUI for building, practicing, and validating **CCNA 200-301** labs on an **existing EVE-NG server**, using Cisco IOSv and IOSvL2 images that you provide legally.
 
-> **Deployment scope:** EVE-NG is assumed to be already deployed and operational. This repository does **not** install, provision, package, or deploy EVE-NG. The Windows and macOS packages install only the **CCNA EVE Lab Builder desktop application**.
+> **Deployment scope:** EVE-NG is assumed to be already deployed and operational. This repository does **not** install, provision, package, or deploy EVE-NG. The CCNA EVE Lab Builder application is intended to be run directly from source on Windows, macOS, or Linux.
 
 > **Cisco images are not included.** You must provide your own legally obtained IOSv / IOSvL2 images. Never commit Cisco images to this repository.
 
@@ -42,7 +42,6 @@ Existing EVE-NG server
 - Structured validation assertions for interfaces, VLANs, trunks, EtherChannel, routes, OSPF neighbors, HSRP, CDP, SSH, regex checks, positive/negative text checks, and more.
 - Detailed validation reports with expected, matched, missing, observed output, target identity, and suggested remediation commands.
 - GitHub Actions CI and unit tests.
-- Windows and macOS desktop packaging.
 
 ## Lab catalog
 
@@ -102,13 +101,14 @@ Where the workbook question and answer sections disagree, the scenario documents
 
 ## Prerequisite: existing EVE-NG
 
-Before installing or running this application, you should already have:
+Before running this application, you should already have:
 
 - an operational EVE-NG Community or Pro server;
 - network reachability from the workstation to EVE-NG;
 - SSH access to the EVE-NG server;
 - an EVE-NG account usable through the Web/API;
-- legal IOSv and IOSvL2 images if you want the application to import them.
+- legal IOSv and IOSvL2 images if you want the application to import them;
+- Python with Tkinter available on the workstation running the application.
 
 EVE-NG installation, hypervisor configuration, VM sizing, nested virtualization, upgrades, and backups are outside this project's deployment scope.
 
@@ -195,37 +195,9 @@ A working Python/Tk installation is required when running from source.
 
 ## Quick start — Windows
 
-Windows 10/11 x64 is supported.
+Windows 10/11 x64 is supported. The application is run directly from source.
 
-### Option A — Run the packaged Windows application
-
-When using a packaged release, the Windows artifacts are:
-
-```text
-CCNA-EVE-Lab-Builder-Windows-x64-<version>-Setup.exe
-CCNA-EVE-Lab-Builder-Windows-x64-<version>-Portable.zip
-```
-
-**Installer:**
-
-1. Download the `Setup.exe` artifact from the project release.
-2. Run the installer.
-3. Launch **CCNA EVE Lab Builder** from the Start Menu or installed shortcut.
-4. Enter the connection information for your existing EVE-NG server.
-
-**Portable version:**
-
-1. Download the `Portable.zip` artifact.
-2. Extract the complete ZIP to a local directory.
-3. Run:
-
-```text
-CCNA EVE Lab Builder.exe
-```
-
-Python is **not required on the end-user Windows workstation** when using the packaged installer or portable build.
-
-### Option B — Run from source with PowerShell
+### PowerShell
 
 Install **Python 3.10+** for Windows, then open PowerShell:
 
@@ -247,11 +219,12 @@ If `py` is not available but `python` is in your PATH:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 python -m ccna_lab_builder.app
 ```
 
-### Option C — Run from source with Command Prompt
+### Command Prompt
 
 ```bat
 git clone https://github.com/gpareNTNX/ccna-lab.git
@@ -262,23 +235,6 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 python -m ccna_lab_builder.app
 ```
-
-### Build the Windows installer yourself
-
-Build-machine prerequisites:
-
-- Windows 10/11 x64
-- Python 3.10+
-- Inno Setup 6
-
-Then run:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\deploy\windows\build-all.ps1
-```
-
-The build pipeline creates a PyInstaller `onedir` portable application, a ZIP, and an Inno Setup installer.
 
 ## Connecting the application to EVE-NG
 
@@ -510,9 +466,6 @@ ccna-lab/
 │   │   ├── scenarios_v2.json
 │   │   └── workbook_scenarios.py
 │   └── gui/
-├── deploy/
-│   ├── windows/
-│   └── macos/
 ├── docs/
 ├── tests/
 ├── scripts/
@@ -524,18 +477,6 @@ ccna-lab/
 ├── requirements.txt
 └── README.md
 ```
-
-## Desktop installers
-
-The deployment pipeline is for the desktop application only:
-
-- Windows x64 `.exe` installer
-- Windows portable `.zip`
-- macOS Apple Silicon `.dmg`
-- macOS Intel `.dmg`
-- GitHub Release build workflow
-
-**No EVE-NG VM, ISO, OVA, hypervisor configuration, EVE-NG installer, or Cisco IOS image is bundled.**
 
 ## Known limitations
 
@@ -570,11 +511,6 @@ See [Troubleshooting](docs/TROUBLESHOOTING.md) for more detail.
 - [Training labs](docs/LABS.md)
 - [Validation](docs/VALIDATION.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Desktop deployment](docs/DEPLOYMENT.md)
-- [Windows deployment](docs/DEPLOYMENT-WINDOWS.md)
-- [macOS deployment](docs/DEPLOYMENT-MACOS.md)
-- [Déploiement en français](docs/DEPLOIEMENT-FR.md)
-- [Releasing](docs/RELEASING.md)
 - [GitHub publishing](docs/GITHUB.md)
 - [Contributing](CONTRIBUTING.md)
 
