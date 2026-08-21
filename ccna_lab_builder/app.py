@@ -118,7 +118,27 @@ class SafeMainWindow(MainWindow):
         self._set_validation_target(lab)
 
 
+def _install_tk_listbox_compat():
+    """Ignore Listbox styling options unsupported by some Tk builds (notably macOS)."""
+    original_listbox = tk.Listbox
+    if getattr(original_listbox, "_ccna_ui_compat", False):
+        return
+
+    class CompatibleListbox(original_listbox):
+        _ccna_ui_compat = True
+
+        def __init__(self, master=None, cnf=None, **kw):
+            options = dict(cnf or {})
+            options.update(kw)
+            options.pop("activebackground", None)
+            options.pop("activeforeground", None)
+            super().__init__(master, options)
+
+    tk.Listbox = CompatibleListbox
+
+
 def main():
+    _install_tk_listbox_compat()
     root = tk.Tk()
     root.title("CCNA 200-301 EVE-NG Lab Builder")
     root.geometry("1440x900")
