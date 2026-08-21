@@ -8,6 +8,18 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.3.0 — 2026-08-21
+
+- Added a dedicated interactive Device Console workspace
+- Added double-click console access directly from Topology devices
+- Added multiple simultaneous device console tabs
+- Reused exact EVE-NG runtime/QEMU console discovery from Live Validator
+- Added interactive Enter, Tab, arrow, Ctrl+C and clipboard-paste terminal input
+- Added connect, reconnect, clear, disconnect and disconnect-all controls
+- Added user-provided router, switch, cloud, terminal, firewall and server icons
+- Added transparent optimized PNG assets without adding a runtime image dependency
+- Added icon-based topology node rendering with live validation status badges
+
 ## 4.2.0 — 2026-08-21
 
 - Added an EVE-inspired graphical Topology Canvas workspace
