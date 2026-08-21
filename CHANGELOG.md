@@ -8,6 +8,14 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.3.2 — 2026-08-21
+
+- Added recursive discovery of real EVE-NG `.unl` labs through the existing SSH connection
+- Added an `EVE LAB` selector and refresh control to Device Console
+- Added AUTO resolution across `/opt/unetlab/labs`, including labs outside the configured folder
+- Added safe ambiguity handling when multiple labs contain the same topology node
+- Added clearer diagnostics showing discovered EVE labs when no matching node can be found
+
 ## 4.3.1 — 2026-08-21
 
 - Fixed Device Console attempts against predicted `.unl` paths that do not exist on EVE-NG
