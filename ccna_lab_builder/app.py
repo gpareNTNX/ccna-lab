@@ -1,6 +1,6 @@
 import re
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import messagebox
 
 from ccna_lab_builder.core.builder import LabBuilder
 from ccna_lab_builder.core.console_auth import (
@@ -120,13 +120,10 @@ class SafeMainWindow(MainWindow):
 
 def main():
     root = tk.Tk()
-    root.title("CCNA 200-301 EVE-NG Lab Builder — Scenario V2")
-    root.geometry("1240x860")
-    root.minsize(1050, 720)
-    try:
-        ttk.Style().theme_use("clam")
-    except tk.TclError:
-        pass
+    root.title("CCNA 200-301 EVE-NG Lab Builder")
+    root.geometry("1440x900")
+    root.minsize(1180, 720)
+    root.configure(bg=MainWindow.BG)
     SafeMainWindow(root).pack(fill="both", expand=True)
     root.mainloop()
 
