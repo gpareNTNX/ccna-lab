@@ -10,6 +10,7 @@ from ccna_lab_builder.core.console_auth import (
     LAB_IOS_USERNAME,
 )
 from ccna_lab_builder.gui.main import MainWindow
+from ccna_lab_builder.gui.topology_canvas import install_topology_workspace
 
 
 class SafeMainWindow(MainWindow):
@@ -23,6 +24,7 @@ class SafeMainWindow(MainWindow):
         self._activity_running = {}
         self._task_context = threading.local()
         super().__init__(parent)
+        install_topology_workspace(self)
         self._install_activity_panels()
 
     def _install_activity_panels(self):
@@ -406,7 +408,7 @@ def _install_tk_listbox_compat():
 def main():
     _install_tk_listbox_compat()
     root = tk.Tk()
-    root.title("CCNA 200-301 EVE-NG Lab Builder")
+    root.title("CCNA 200-301 EVE-NG Lab Builder v4.2.0")
     root.geometry("1440x900")
     root.minsize(1180, 720)
     root.configure(bg=MainWindow.BG)
