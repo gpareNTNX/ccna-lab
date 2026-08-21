@@ -2,6 +2,7 @@
 
 from ccna_lab_builder.gui import topology_canvas as _topology_canvas
 from ccna_lab_builder.gui.console_workspace import install_console_workspace
+from ccna_lab_builder.gui.console_target_compat import install_console_target_compat
 
 
 if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", False):
@@ -10,6 +11,7 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
     def _install_topology_and_console(window):
         _original_install_topology_workspace(window)
         install_console_workspace(window)
+        install_console_target_compat(window)
 
     _install_topology_and_console._console_wrapped = True
     _topology_canvas.install_topology_workspace = _install_topology_and_console

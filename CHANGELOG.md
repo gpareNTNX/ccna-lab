@@ -8,6 +8,14 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.3.1 — 2026-08-21
+
+- Fixed Device Console attempts against predicted `.unl` paths that do not exist on EVE-NG
+- Added verification of the active topology lab before opening an IOS console
+- Added scenario/Validator target resolution and configured-folder discovery for matching labs
+- Added clear guidance to build the Master Lab or create the selected scenario when no real lab exists
+- Preserved exact EVE-NG runtime/QEMU console discovery after the lab target is resolved
+
 ## 4.3.0 — 2026-08-21
 
 - Added a dedicated interactive Device Console workspace
