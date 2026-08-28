@@ -8,6 +8,17 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.5.0 — 2026-08-28
+
+- Added strict Single Active Lab coordination for EVE-NG sessions
+- Automatically disconnects all interactive device consoles before switching labs
+- Automatically stops every node in the previously active lab before activating another lab
+- Performs an initial EVE lab safety sweep after application launch to stop labs left active by a prior session
+- Prevents target activation when the previous lab cannot be stopped successfully
+- Applies automatic lab switching to Master Lab build/start, Training Lab creation, Live Validator and Device Console access
+- Added an Active Lab status strip and manual `STOP & CLOSE ACTIVE LAB` control in Device Console
+- Added unit tests for first activation cleanup, same-lab reuse, lab swaps, failure handling and manual close
+
 ## 4.4.0 — 2026-08-28
 
 - Enabled automatic EVE-NG cabling for every newly generated Master Lab and Training Lab

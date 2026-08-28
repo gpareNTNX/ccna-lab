@@ -6,6 +6,7 @@ from ccna_lab_builder.gui.console_workspace import install_console_workspace
 from ccna_lab_builder.gui.console_target_compat import install_console_target_compat
 from ccna_lab_builder.gui.console_lab_discovery import install_global_console_lab_discovery
 from ccna_lab_builder.gui.terminal_stream_compat import install_terminal_stream_compat
+from ccna_lab_builder.gui.single_active_lab import install_single_active_lab
 
 
 if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", False):
@@ -18,6 +19,7 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
         install_global_console_lab_discovery(window)
         install_terminal_stream_compat(window)
         install_automatic_cabling(window)
+        install_single_active_lab(window)
 
     _install_topology_and_console._console_wrapped = True
     _topology_canvas.install_topology_workspace = _install_topology_and_console
