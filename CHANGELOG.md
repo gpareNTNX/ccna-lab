@@ -8,6 +8,16 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.4.0 — 2026-08-28
+
+- Enabled automatic EVE-NG cabling for every newly generated Master Lab and Training Lab
+- Removed the need to manually enable the previous experimental cabling toggle
+- Legacy labs 01–20 now generate with the reusable Master Topology links automatically connected
+- Scenario V2/workbook labs automatically connect the links defined by their own topology data
+- Lab generation now fails visibly when EVE-NG cannot create a requested link instead of silently leaving an isolated topology
+- Added generation logs showing the expected number of automatically created links
+- Added automatic-cabling unit tests for Master, legacy training and Scenario V2 generation
+
 ## 4.3.3 — 2026-08-28
 
 - Fixed interactive console rendering of IOS carriage returns, backspaces and cursor-control sequences
