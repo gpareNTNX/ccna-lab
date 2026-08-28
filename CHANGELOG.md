@@ -8,6 +8,15 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.3.3 — 2026-08-28
+
+- Fixed interactive console rendering of IOS carriage returns, backspaces and cursor-control sequences
+- Added stateful VT/ANSI handling for cursor movement, line erase and clear-screen operations
+- Suppressed OSC terminal-title sequences such as `]0;R1-EDGE` from the visible console
+- Added support for ANSI/OSC sequences split across multiple console packets
+- Restored Cisco `Ctrl+C` interrupt behavior while keeping macOS `Command+C` and Ctrl+Shift+C for copy
+- Added terminal-stream unit tests covering OSC, backspace, cursor overwrite, CR rewrite and clear-screen behavior
+
 ## 4.3.2 — 2026-08-21
 
 - Added recursive discovery of real EVE-NG `.unl` labs through the existing SSH connection
