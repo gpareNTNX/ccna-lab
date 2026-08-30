@@ -8,6 +8,16 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.6.0 — 2026-08-30
+
+- Added a persistent `Replace existing lab automatically` option for Master and Training Lab generation
+- Existing labs can now be stopped, have their interactive consoles closed, be deleted, and be rebuilt automatically instead of failing with EVE error 60016
+- Lab replacement waits for EVE-NG to confirm that the old `.unl` file is gone before rebuilding
+- Restored the interactive console's stable exact-runtime lookup path before invoking aggressive stale-runtime recovery
+- Limited controlled node recycling in Device Console to a fallback after normal console discovery genuinely fails
+- Preserved the stricter runtime-recovery behavior for Live Validator
+- Added unit tests for lab deletion/rebuild handling and console recovery isolation
+
 ## 4.5.1 — 2026-08-30
 
 - Added runtime-aware recovery when EVE reports a node running but no exact QEMU runtime exists
