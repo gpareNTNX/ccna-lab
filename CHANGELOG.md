@@ -8,6 +8,16 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.6.1 — 2026-08-30
+
+- Fixed EVE error 20033 by never trusting a network ID returned incidentally by `POST /networks`
+- Cabling now re-reads both EVE `/networks` and `/links` and uses only network IDs advertised as valid Ethernet endpoints
+- Added post-connect interface verification so a link is accepted only when EVE reports the expected `network_id` on the interface
+- Failed lab generation now stops and deletes the partially-created lab when cleanup APIs are available
+- Restored Device Console to the stable exact-runtime resolver; aggressive stop/start recovery is now scoped to Live Validator only
+- Added use of EVE-NG's real `/labs/close` API after a lab is stopped
+- Added regression tests for misleading network IDs, endpoint verification, and EVE lab close
+
 ## 4.6.0 — 2026-08-30
 
 - Added a persistent `Replace existing lab automatically` option for Master and Training Lab generation
