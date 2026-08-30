@@ -8,6 +8,15 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 4.5.1 — 2026-08-30
+
+- Added runtime-aware recovery when EVE reports a node running but no exact QEMU runtime exists
+- Automatically performs a controlled node stop/start before Console or Validator gives up
+- Keeps the verified-runtime safety check and still refuses unverified EVE API Telnet ports
+- Waits for QEMU runtimes from the previous lab to fully disappear before completing a lab swap
+- Aborts a lab switch when old QEMU processes remain active after EVE accepts the stop request
+- Added runtime-recovery tests covering stale node restart and QEMU shutdown confirmation
+
 ## 4.5.0 — 2026-08-28
 
 - Added strict Single Active Lab coordination for EVE-NG sessions
