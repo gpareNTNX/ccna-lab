@@ -2,6 +2,7 @@
 
 from ccna_lab_builder.gui import topology_canvas as _topology_canvas
 from ccna_lab_builder.gui.automatic_cabling import install_automatic_cabling
+from ccna_lab_builder.gui.connection_feedback import install_connection_feedback
 from ccna_lab_builder.gui.console_lab_discovery import install_global_console_lab_discovery
 from ccna_lab_builder.gui.console_target_compat import install_console_target_compat
 from ccna_lab_builder.gui.console_workspace import install_console_workspace
@@ -28,6 +29,7 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
         install_runtime_recovery(window)
         install_lab_rebuild_and_console_fix(window)
         install_stability_461(window)
+        install_connection_feedback(window)
 
     _install_topology_and_console._console_wrapped = True
     _topology_canvas.install_topology_workspace = _install_topology_and_console
