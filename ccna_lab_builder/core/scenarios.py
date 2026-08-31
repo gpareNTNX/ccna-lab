@@ -1,6 +1,7 @@
 import json
 from importlib.resources import files
 
+from ccna_lab_builder.data.legacy_topologies import legacy_topology
 from ccna_lab_builder.data.workbook_scenarios import workbook_scenarios
 
 
@@ -32,6 +33,15 @@ class ScenarioCatalog:
             scenario.setdefault("schema_version", 1)
             scenario.setdefault("tasks", [])
             scenario.setdefault("checks", [])
+
+            if not scenario.get("topology"):
+                topology = legacy_topology(scenario_id)
+                if topology is not None:
+                    scenario["topology"] = topology
+                    scenario["schema_version"] = max(
+                        2,
+                        int(scenario.get("schema_version", 1)),
+                    )
 
         self.scenarios = scenarios
 
