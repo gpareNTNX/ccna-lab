@@ -1,12 +1,12 @@
 import unittest
 
+from ccna_lab_builder.core.builder import LabBuilder
 from ccna_lab_builder.core.challenges import ChallengeCatalog
 from ccna_lab_builder.core.scenarios import ScenarioCatalog
 from ccna_lab_builder.gui.challenge_pack import (
     _install_vpcs_builder_support,
     _vpcs_runtime_backend,
 )
-from ccna_lab_builder.core.builder import LabBuilder
 
 
 class ChallengeCatalogTests(unittest.TestCase):
@@ -14,8 +14,9 @@ class ChallengeCatalogTests(unittest.TestCase):
         self.assertEqual(len(ScenarioCatalog().all()), 37)
         catalog = ChallengeCatalog()
         self.assertEqual(len(catalog.all()), 8)
-        self.assertEqual(len(catalog.archive()), 28)
+        self.assertEqual(catalog.archive(), [])
         self.assertTrue(all(item["id"].startswith("PT-C") for item in catalog.all()))
+        self.assertTrue(all(item.get("buildable") for item in catalog.all()))
 
     def test_challenge_topologies_are_self_contained(self):
         for challenge in ChallengeCatalog().all():
@@ -26,18 +27,38 @@ class ChallengeCatalogTests(unittest.TestCase):
             for link in links:
                 self.assertIn(link["a"], names, challenge["id"])
                 self.assertIn(link["b"], names, challenge["id"])
-                for endpoint in ((link["a"], link["a_if"]), (link["b"], link["b_if"])):
-                    self.assertNotIn(endpoint, used, f"{challenge['id']} reuses {endpoint}")
+                for endpoint in (
+                    (link["a"], link["a_if"]),
+                    (link["b"], link["b_if"]),
+                ):
+                    self.assertNotIn(
+                        endpoint,
+                        used,
+                        f"{challenge['id']} reuses {endpoint}",
+                    )
                     used.add(endpoint)
             for check in challenge.get("checks", []):
-                target = next(node for node in nodes if node["name"] == check["node"])
+                target = next(
+                    node for node in nodes if node["name"] == check["node"]
+                )
                 self.assertNotEqual(target.get("template"), "vpcs")
 
-    def test_archive_tracks_all_unique_pkt_payloads(self):
-        archive = ChallengeCatalog().archive()
-        self.assertEqual(len({item["id"] for item in archive}), 28)
-        self.assertTrue(any(item["status"] == "blocked" for item in archive))
-        self.assertTrue(any(item["status"] == "migrated" for item in archive))
+    def test_only_converted_challenges_are_exposed(self):
+        catalog = ChallengeCatalog()
+        self.assertEqual(
+            [item["id"] for item in catalog.all()],
+            [
+                "PT-C01",
+                "PT-C02",
+                "PT-C03",
+                "PT-C04",
+                "PT-C05",
+                "PT-C06",
+                "PT-C07",
+                "PT-C08",
+            ],
+        )
+        self.assertFalse(catalog.archive())
 
 
 class VpcsSupportTests(unittest.TestCase):
