@@ -1,6 +1,12 @@
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
+
+Assertion = Mapping[str, Any]
+Check = Mapping[str, Any]
+Scenario = Mapping[str, Any]
 
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _PROMPT_RE = re.compile(r"^[A-Za-z0-9_.:/()\-]+[>#]\s*$")
@@ -11,17 +17,25 @@ class CheckResult:
     node: str
     command: str
     passed: bool
-    missing: list
+    missing: list[str]
     output: str
-    expected: list = field(default_factory=list)
-    matched: list = field(default_factory=list)
-    remediation: list = field(default_factory=list)
+    expected: list[str] = field(default_factory=list)
+    matched: list[str] = field(default_factory=list)
+    remediation: list[str] = field(default_factory=list)
+
+    def __repr__(self) -> str:
+        return (
+            f"CheckResult(node={self.node!r}, command={self.command!r}, "
+            f"passed={self.passed}, missing={self.missing!r}, "
+            f"matched={len(self.matched)} assertions, "
+            f"output_lines={len(self.output.splitlines())})"
+        )
 
 
 class Validator:
     @staticmethod
-    def _apply_backspaces(text):
-        chars = []
+    def _apply_backspaces(text: str) -> str:
+        chars: list[str] = []
         for char in text:
             if char == "\b":
                 if chars:
@@ -31,13 +45,13 @@ class Validator:
         return "".join(chars)
 
     @classmethod
-    def clean_output(cls, command, output):
+    def clean_output(cls, command: str, output: str | None) -> str:
         text = str(output or "").replace("\x00", "")
         text = _ANSI_RE.sub("", text)
         text = cls._apply_backspaces(text)
         text = text.replace("\r\n", "\n").replace("\r", "\n")
         command_norm = re.sub(r"\s+", " ", str(command).strip()).casefold()
-        cleaned = []
+        cleaned: list[str] = []
         for raw_line in text.splitlines():
             line = raw_line.strip()
             if not line:
@@ -54,11 +68,11 @@ class Validator:
         return "\n".join(cleaned)
 
     @staticmethod
-    def _normalized_search_text(value):
+    def _normalized_search_text(value: object) -> str:
         return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
 
     @staticmethod
-    def _assertion_label(assertion):
+    def _assertion_label(assertion: Assertion) -> str:
         if assertion.get("label"):
             return str(assertion["label"])
         kind = assertion.get("type", "contains")
@@ -87,7 +101,7 @@ class Validator:
         return str(kind)
 
     @classmethod
-    def _evaluate_assertion(cls, assertion, cleaned):
+    def _evaluate_assertion(cls, assertion: Assertion, cleaned: str) -> bool:
         kind = assertion.get("type", "contains")
         searchable = cls._normalized_search_text(cleaned)
         lines = cleaned.splitlines()
@@ -214,7 +228,7 @@ class Validator:
         raise ValueError(f"Unsupported validation assertion type: {kind}")
 
     @classmethod
-    def _expected_assertions(cls, check):
+    def _expected_assertions(cls, check: Check) -> list[Assertion]:
         assertions = list(check.get("assertions", []))
         if assertions:
             return assertions
@@ -224,7 +238,7 @@ class Validator:
         ]
 
     @classmethod
-    def _suggest_remediation(cls, check, missing):
+    def _suggest_remediation(cls, check: Check, missing: list[str]) -> list[str]:
         if not missing:
             return []
         if check.get("remediation"):
@@ -288,11 +302,11 @@ class Validator:
         return []
 
     @classmethod
-    def validate_output(cls, check, output):
-        cleaned = cls.clean_output(check.get("command", ""), output)
+    def validate_output(cls, check: Check, output: str) -> CheckResult:
+        cleaned = cls.clean_output(str(check.get("command", "")), output)
         assertions = cls._expected_assertions(check)
-        matched = []
-        missing = []
+        matched: list[str] = []
+        missing: list[str] = []
         for assertion in assertions:
             label = cls._assertion_label(assertion)
             if cls._evaluate_assertion(assertion, cleaned):
@@ -301,8 +315,8 @@ class Validator:
                 missing.append(label)
         expected = [cls._assertion_label(item) for item in assertions]
         return CheckResult(
-            node=check["node"],
-            command=check["command"],
+            node=str(check["node"]),
+            command=str(check["command"]),
             passed=not missing,
             missing=missing,
             output=cleaned,
@@ -311,15 +325,19 @@ class Validator:
             remediation=cls._suggest_remediation(check, missing),
         )
 
-    def validate_pasted(self, scenario, outputs):
-        results = []
+    def validate_pasted(
+        self,
+        scenario: Scenario,
+        outputs: Mapping[tuple[str, str], str],
+    ) -> list[CheckResult]:
+        results: list[CheckResult] = []
         for check in scenario.get("checks", []):
-            key = (check["node"], check["command"])
+            key = (str(check["node"]), str(check["command"]))
             results.append(self.validate_output(check, outputs.get(key, "")))
         return results
 
     @staticmethod
-    def score(results):
+    def score(results: Sequence[CheckResult]) -> int:
         if not results:
             return 0
         return round(100 * sum(1 for result in results if result.passed) / len(results))

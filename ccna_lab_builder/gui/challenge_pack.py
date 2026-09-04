@@ -15,7 +15,7 @@ from ccna_lab_builder.core.live_validation import LiveValidator
 from ccna_lab_builder.gui.console_workspace import ConsoleWorkspace
 
 
-VERSION = "4.8.1"
+VERSION = "4.8.2"
 
 
 def _install_vpcs_builder_support():
