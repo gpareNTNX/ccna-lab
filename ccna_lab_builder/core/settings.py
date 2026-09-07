@@ -11,11 +11,7 @@ DEFAULT = {
     },
     "lab": {"folder": "/CCNA-200-301", "master_name": "CCNA-MASTER-LAB"},
     "compatibility": {"experimental_cabling": False},
-    "learning": {
-        "continuous_validation": False,
-        "validation_interval": 25,
-        "history": [],
-    },
+    "learning": {"history": []},
 }
 
 
