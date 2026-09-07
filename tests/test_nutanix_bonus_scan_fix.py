@@ -1,6 +1,6 @@
 import unittest
 
-from ccna_lab_builder.gui.nutanix_bonus_compat import (
+from ccna_lab_builder.gui.nutanix_bonus_scan_fix import (
     _classify_qemu_images,
     _select_default_bonus,
 )
