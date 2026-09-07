@@ -9,7 +9,12 @@ import types
 from ccna_lab_builder.core.live_validation import LiveValidator
 
 
-VERSION = "4.5.1"
+VERSION = "5.1.2"
+GRACEFUL_LAB_STOP_TIMEOUT = 30.0
+INDIVIDUAL_NODE_STOP_TIMEOUT = 15.0
+SIGTERM_TIMEOUT = 8.0
+SIGKILL_TIMEOUT = 5.0
+LAB_STOP_POLL = 0.25
 
 
 def _node_status(node_info):
@@ -177,6 +182,39 @@ def _running_runtime_pids(controller, lab_uuid):
     return [line.strip() for line in out.splitlines() if line.strip().isdigit()]
 
 
+def _signal_lab_runtimes(controller, lab_uuid, signal):
+    """Signal only QEMU PIDs whose runtime cwd belongs to the exact EVE lab UUID."""
+    signal = str(signal or "").upper().strip()
+    if signal not in {"TERM", "KILL"}:
+        raise ValueError("Only TERM and KILL are allowed for scoped QEMU recovery.")
+    if not lab_uuid or not controller.window.ssh:
+        return []
+
+    suffix = f"/{lab_uuid}/"
+    script = (
+        "target="
+        + shlex.quote(suffix)
+        + "; sig="
+        + shlex.quote(signal)
+        + "; "
+        + "for pid in $(pgrep -f 'qemu-system|qemu-kvm' 2>/dev/null); do "
+        + 'cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null || true); '
+        + 'case "$cwd" in /opt/unetlab/tmp/*"$target"*) '
+        + 'kill -s "$sig" "$pid" 2>/dev/null && printf "%s\\n" "$pid";; esac; '
+        + "done"
+    )
+    out, err = controller.window.ssh.exec(script)
+    signaled = [line.strip() for line in out.splitlines() if line.strip().isdigit()]
+    if signaled:
+        controller.window.log(
+            f"Sent SIG{signal} to {len(signaled)} QEMU runtime(s) scoped to "
+            f"EVE lab UUID {lab_uuid}: {', '.join(signaled)}"
+        )
+    if err.strip():
+        controller.window.log(f"WARNING: scoped SIG{signal} command: {err.strip()}")
+    return signaled
+
+
 def _lab_uuid(controller, lab):
     try:
         data = controller.window.api.get_lab(lab).get("data", {})
@@ -185,7 +223,56 @@ def _lab_uuid(controller, lab):
     return str(data.get("id") or "").strip()
 
 
-def _wait_for_lab_runtimes_to_stop(controller, lab, lab_uuid, timeout=10.0, poll=0.25):
+def _lab_node_ids(controller, lab):
+    try:
+        data = controller.window.api.nodes(lab).get("data", {})
+    except RuntimeError as exc:
+        controller.window.log(f"WARNING: could not enumerate EVE nodes for {lab}: {exc}")
+        return []
+
+    if isinstance(data, dict):
+        return [str(node_id) for node_id in data.keys()]
+    if isinstance(data, list):
+        node_ids = []
+        for node in data:
+            if isinstance(node, dict) and node.get("id") is not None:
+                node_ids.append(str(node["id"]))
+        return node_ids
+    return []
+
+
+def _stop_lab_nodes_individually(controller, lab):
+    node_ids = _lab_node_ids(controller, lab)
+    if not node_ids:
+        controller.window.log(f"No EVE node IDs were available for per-node stop retry: {lab}")
+        return 0
+
+    controller.window.log(
+        f"Retrying stop individually for {len(node_ids)} node(s) in {lab}..."
+    )
+    accepted = 0
+    for node_id in node_ids:
+        try:
+            controller.window.api.stop_node(lab, node_id)
+            accepted += 1
+        except RuntimeError as exc:
+            controller.window.log(
+                f"WARNING: EVE-NG did not accept stop for node {node_id} in {lab}: {exc}"
+            )
+    controller.window.log(
+        f"Per-node stop requests accepted for {accepted}/{len(node_ids)} node(s): {lab}"
+    )
+    return accepted
+
+
+def _wait_for_lab_runtimes_to_stop(
+    controller,
+    lab,
+    lab_uuid,
+    timeout=GRACEFUL_LAB_STOP_TIMEOUT,
+    poll=LAB_STOP_POLL,
+    log_timeout=True,
+):
     if not lab_uuid:
         return True
     deadline = time.monotonic() + max(0.0, timeout)
@@ -196,11 +283,90 @@ def _wait_for_lab_runtimes_to_stop(controller, lab, lab_uuid, timeout=10.0, poll
             controller.window.log(f"Confirmed all QEMU runtimes stopped: {lab}")
             return True
         if time.monotonic() >= deadline:
-            controller.window.log(
-                f"ERROR: QEMU runtimes still active for {lab}: {', '.join(last_pids)}"
-            )
+            if log_timeout:
+                controller.window.log(
+                    f"QEMU runtimes still active for {lab}: {', '.join(last_pids)}"
+                )
             return False
         time.sleep(max(0.01, poll))
+
+
+def _recover_stuck_lab_runtimes(
+    controller,
+    lab,
+    lab_uuid,
+    graceful_timeout=GRACEFUL_LAB_STOP_TIMEOUT,
+    node_timeout=INDIVIDUAL_NODE_STOP_TIMEOUT,
+    term_timeout=SIGTERM_TIMEOUT,
+    kill_timeout=SIGKILL_TIMEOUT,
+    poll=LAB_STOP_POLL,
+):
+    """Escalate a stuck EVE lab stop without touching QEMU processes from other labs."""
+    controller.window.log(
+        f"Waiting up to {graceful_timeout:g}s for EVE-NG QEMU runtimes to stop: {lab}"
+    )
+    if _wait_for_lab_runtimes_to_stop(
+        controller,
+        lab,
+        lab_uuid,
+        timeout=graceful_timeout,
+        poll=poll,
+        log_timeout=False,
+    ):
+        return True
+
+    controller.window.log(
+        f"WARNING: graceful lab stop exceeded {graceful_timeout:g}s for {lab}; "
+        "retrying with individual node stops."
+    )
+    _stop_lab_nodes_individually(controller, lab)
+    if _wait_for_lab_runtimes_to_stop(
+        controller,
+        lab,
+        lab_uuid,
+        timeout=node_timeout,
+        poll=poll,
+        log_timeout=False,
+    ):
+        return True
+
+    remaining = _running_runtime_pids(controller, lab_uuid)
+    controller.window.log(
+        f"WARNING: {len(remaining)} QEMU runtime(s) are still attached to {lab}; "
+        "sending SIGTERM only to processes scoped to this lab UUID."
+    )
+    _signal_lab_runtimes(controller, lab_uuid, "TERM")
+    if _wait_for_lab_runtimes_to_stop(
+        controller,
+        lab,
+        lab_uuid,
+        timeout=term_timeout,
+        poll=poll,
+        log_timeout=False,
+    ):
+        return True
+
+    remaining = _running_runtime_pids(controller, lab_uuid)
+    controller.window.log(
+        f"WARNING: {len(remaining)} QEMU runtime(s) ignored SIGTERM for {lab}; "
+        "sending scoped SIGKILL as the final recovery step."
+    )
+    _signal_lab_runtimes(controller, lab_uuid, "KILL")
+    if _wait_for_lab_runtimes_to_stop(
+        controller,
+        lab,
+        lab_uuid,
+        timeout=kill_timeout,
+        poll=poll,
+        log_timeout=False,
+    ):
+        return True
+
+    remaining = _running_runtime_pids(controller, lab_uuid)
+    controller.window.log(
+        f"ERROR: QEMU runtimes could not be stopped for {lab}: {', '.join(remaining) or 'unknown'}"
+    )
+    return False
 
 
 def _install_single_lab_runtime_wait(controller):
@@ -212,13 +378,11 @@ def _install_single_lab_runtime_wait(controller):
         lab_uuid = _lab_uuid(self, lab)
         result = original(lab)
         if lab_uuid and self.window.ssh:
-            self.window.log(
-                f"Waiting for EVE-NG QEMU runtimes to stop before leaving {lab}..."
-            )
-            if not _wait_for_lab_runtimes_to_stop(self, lab, lab_uuid):
+            if not _recover_stuck_lab_runtimes(self, lab, lab_uuid):
                 raise RuntimeError(
-                    f"EVE-NG accepted the stop request for {lab}, but QEMU processes "
-                    "are still running. The lab switch was aborted."
+                    f"EVE-NG accepted the stop request for {lab}, but its QEMU processes "
+                    "could not be terminated after graceful stop, per-node stop, SIGTERM, "
+                    "and lab-scoped SIGKILL recovery. The lab switch was aborted."
                 )
         return result
 
@@ -227,7 +391,7 @@ def _install_single_lab_runtime_wait(controller):
 
 
 def install_runtime_recovery(window):
-    """Install stale-runtime repair and strict stop confirmation for lab swaps."""
+    """Install stale-runtime repair and robust stop confirmation for lab swaps."""
     _install_validator_recovery()
 
     controller = getattr(window, "_active_lab_controller", None)
