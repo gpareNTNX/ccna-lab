@@ -1,8 +1,8 @@
 # CCNA 200-301 EVE-NG Lab Builder
 
 > [!IMPORTANT]
-> ### 💡 Une idée et un concept de **Guillaume Paré**
-> **Original idea & concept by Guillaume Paré.**
+> ### 💡 Original project vision, idea, and concept by **Guillaume Paré**
+> Conceived and initiated by **Guillaume Paré**.
 
 A desktop GUI for building, practicing, and validating **CCNA 200-301** labs on an **existing EVE-NG server**, using Cisco IOSv and IOSvL2 images that you provide legally.
 
@@ -541,7 +541,7 @@ ruff check ccna_lab_builder tests
 
 ## Legal and attribution
 
-**Original idea and concept: Guillaume Paré.** See [Project Origin & Credits](CREDITS.md).
+**Original project vision, idea, and concept: Guillaume Paré.** See [Project Origin & Credits](CREDITS.md).
 
 This project is not affiliated with Cisco or EVE-NG. Cisco, IOS, IOSv, EVE-NG, and related marks belong to their respective owners.
 
