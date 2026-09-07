@@ -12,6 +12,8 @@ from ccna_lab_builder.gui.lab_rebuild_console_fix import (
 )
 from ccna_lab_builder.gui.learning_experience import install_learning_experience
 from ccna_lab_builder.gui.manual_validation_only import install_manual_validation_only
+from ccna_lab_builder.gui.nutanix_bonus import install_nutanix_bonus
+from ccna_lab_builder.gui.nutanix_bonus_compat import install_nutanix_bonus_compat
 from ccna_lab_builder.gui.runtime_recovery import install_runtime_recovery
 from ccna_lab_builder.gui.single_active_lab import install_single_active_lab
 from ccna_lab_builder.gui.ssh_native_cabling import install_ssh_native_cabling
@@ -40,6 +42,8 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
         install_challenge_pack(window)
         install_learning_experience(window)
         install_manual_validation_only(window)
+        install_nutanix_bonus(window)
+        install_nutanix_bonus_compat(window)
 
     _install_topology_and_console._console_wrapped = True
     _topology_canvas.install_topology_workspace = _install_topology_and_console
