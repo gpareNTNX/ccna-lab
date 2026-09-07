@@ -5,8 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 
 CREATOR = "Guillaume Paré"
-CREDIT_TEXT = f"Idea & concept by {CREATOR}"
-CREDIT_SIDEBAR_TEXT = f"Une idée et un concept de\n{CREATOR}"
+CREDIT_TEXT = f"Original project vision, idea & concept by {CREATOR}"
+CREDIT_SIDEBAR_TEXT = f"Original project vision,\nidea & concept by\n{CREATOR}"
 
 
 def install_creator_credit(window):
