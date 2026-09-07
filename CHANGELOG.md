@@ -8,6 +8,14 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 5.1.2 — 2026-09-07
+
+- Increased graceful QEMU shutdown confirmation during lab swaps from 10 to 30 seconds
+- Added a per-node EVE-NG stop retry when a bulk lab stop is accepted but QEMU runtimes remain active
+- Added a final stale-runtime cleanup path using SIGTERM and, only as a last resort, SIGKILL
+- Scoped forced signals to QEMU processes whose EVE runtime working directory contains the exact lab UUID, so other labs are not targeted
+- Added regression tests for per-node retry, UUID-scoped signals, SIGTERM recovery and SIGKILL last-resort behavior
+
 ## 4.6.1 — 2026-08-30
 
 - Fixed EVE error 20033 by never trusting a network ID returned incidentally by `POST /networks`

@@ -2,6 +2,8 @@ import unittest
 
 from ccna_lab_builder.gui.runtime_recovery import (
     _force_node_recycle,
+    _recover_stuck_lab_runtimes,
+    _signal_lab_runtimes,
     _wait_for_lab_runtimes_to_stop,
 )
 
@@ -77,6 +79,55 @@ class FakeController:
         self.window = FakeWindow()
 
 
+class RecoveryAPI:
+    def __init__(self):
+        self.stop_node_calls = []
+
+    def nodes(self, _lab):
+        return {"data": {"1": {"status": 2}, "2": {"status": 2}}}
+
+    def stop_node(self, lab, node_id):
+        self.stop_node_calls.append((lab, str(node_id)))
+        return {"status": "success"}
+
+
+class RecoverySSH:
+    def __init__(self, stop_on_term=True):
+        self.commands = []
+        self.terminated = False
+        self.killed = False
+        self.stop_on_term = stop_on_term
+
+    def exec(self, command):
+        self.commands.append(command)
+        if "sig=TERM" in command:
+            if self.stop_on_term:
+                self.terminated = True
+            return "1234\n", ""
+        if "sig=KILL" in command:
+            self.killed = True
+            self.terminated = True
+            return "1234\n", ""
+        if self.terminated:
+            return "", ""
+        return "1234\n", ""
+
+
+class RecoveryWindow:
+    def __init__(self, stop_on_term=True):
+        self.api = RecoveryAPI()
+        self.ssh = RecoverySSH(stop_on_term=stop_on_term)
+        self.logs = []
+
+    def log(self, message):
+        self.logs.append(message)
+
+
+class RecoveryController:
+    def __init__(self, stop_on_term=True):
+        self.window = RecoveryWindow(stop_on_term=stop_on_term)
+
+
 class RuntimeRecoveryTests(unittest.TestCase):
     def test_stale_running_node_is_stopped_and_restarted(self):
         validator = FakeValidator()
@@ -112,6 +163,65 @@ class RuntimeRecoveryTests(unittest.TestCase):
         self.assertTrue(
             any("Confirmed all QEMU runtimes stopped" in line for line in controller.window.logs)
         )
+
+    def test_scoped_signal_targets_only_exact_lab_uuid(self):
+        controller = RecoveryController()
+
+        signaled = _signal_lab_runtimes(controller, "lab-uuid", "TERM")
+
+        self.assertEqual(signaled, ["1234"])
+        command = controller.window.ssh.commands[-1]
+        self.assertIn("/lab-uuid/", command)
+        self.assertIn("/opt/unetlab/tmp/", command)
+        self.assertIn("kill -s", command)
+        self.assertNotIn("killall", command)
+        self.assertNotIn("pkill", command)
+
+    def test_stuck_lab_escalates_to_per_node_stop_then_scoped_sigterm(self):
+        controller = RecoveryController(stop_on_term=True)
+
+        recovered = _recover_stuck_lab_runtimes(
+            controller,
+            "/CCNA-200-301/CCNA-07-STP-RSTP.unl",
+            "lab-uuid",
+            graceful_timeout=0,
+            node_timeout=0,
+            term_timeout=0,
+            kill_timeout=0,
+            poll=0,
+        )
+
+        self.assertTrue(recovered)
+        self.assertEqual(
+            controller.window.api.stop_node_calls,
+            [
+                ("/CCNA-200-301/CCNA-07-STP-RSTP.unl", "1"),
+                ("/CCNA-200-301/CCNA-07-STP-RSTP.unl", "2"),
+            ],
+        )
+        self.assertTrue(any("sig=TERM" in cmd for cmd in controller.window.ssh.commands))
+        self.assertFalse(any("sig=KILL" in cmd for cmd in controller.window.ssh.commands))
+
+    def test_sigkill_is_last_resort_and_still_lab_scoped(self):
+        controller = RecoveryController(stop_on_term=False)
+
+        recovered = _recover_stuck_lab_runtimes(
+            controller,
+            "/lab.unl",
+            "lab-uuid",
+            graceful_timeout=0,
+            node_timeout=0,
+            term_timeout=0,
+            kill_timeout=0,
+            poll=0,
+        )
+
+        self.assertTrue(recovered)
+        kill_commands = [cmd for cmd in controller.window.ssh.commands if "sig=KILL" in cmd]
+        self.assertEqual(len(kill_commands), 1)
+        self.assertIn("/lab-uuid/", kill_commands[0])
+        self.assertNotIn("killall", kill_commands[0])
+        self.assertNotIn("pkill", kill_commands[0])
 
 
 if __name__ == "__main__":
