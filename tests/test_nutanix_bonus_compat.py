@@ -33,11 +33,16 @@ class FolderRaceAPI(EVEApi):
         self.checked.append(path)
         raise RuntimeError("Requested folder does not exist (60008).")
 
-    def create_folder(self, parent, name):
-        self.created.append((parent, name))
-        if name == "CCNA-200-301":
-            raise RuntimeError("Folder already exists (60013).")
-        return {"status": "success"}
+    def request(self, method, endpoint, **kwargs):
+        if method == "POST" and endpoint == "/folders":
+            payload = kwargs["json"]
+            parent = payload["path"]
+            name = payload["name"]
+            self.created.append((parent, name))
+            if name == "CCNA-200-301":
+                raise RuntimeError("Folder already exists (60013).")
+            return {"status": "success"}
+        raise AssertionError(f"Unexpected request: {method} {endpoint}")
 
 
 class FakeButton:
@@ -94,7 +99,6 @@ class NutanixBonusCompatTests(unittest.TestCase):
     def test_folder_already_exists_race_is_idempotent(self):
         original = EVEApi.create_folder
         try:
-            EVEApi.create_folder = FolderRaceAPI.create_folder
             _install_idempotent_folder_create()
             api = FolderRaceAPI()
 
