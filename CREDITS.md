@@ -1,9 +1,9 @@
 # Project Origin & Credits
 
 > [!IMPORTANT]
-> ## 💡 Une idée et un concept de **Guillaume Paré**
-> **Original idea & concept by Guillaume Paré.**
+> ## 💡 Original project vision, idea, and concept by **Guillaume Paré**
+> Conceived and initiated by **Guillaume Paré**.
 
-The **CCNA 200-301 EVE-NG Lab Builder** originated from the idea, concept, and project vision of **Guillaume Paré**.
+The **CCNA 200-301 EVE-NG Lab Builder** originated from the project vision, idea, and concept of **Guillaume Paré**.
 
-This attribution identifies the original creator and concept originator of the project. Contributions, fixes, testing, and documentation may also come from other contributors over time.
+This attribution identifies **Guillaume Paré** as the original creator, concept originator, and initiator of the project. Contributions, fixes, testing, and documentation may also come from other contributors over time.
