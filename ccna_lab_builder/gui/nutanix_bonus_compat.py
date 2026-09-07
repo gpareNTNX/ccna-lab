@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
-import re
 import threading
 
 from ccna_lab_builder.core.builder import LabBuilder
 from ccna_lab_builder.core.eve_api import EVEApi
 
-
 VERSION = "5.1.3"
+
+
+def _nxos_interface_aliases(value):
+    text = str(value or "").strip()
+    lower = text.lower()
+    suffix = ""
+    for prefix in ("ethernet", "eth", "e"):
+        if lower.startswith(prefix):
+            suffix = text[len(prefix) :]
+            break
+    if not suffix or not suffix[0].isdigit() or "/" not in suffix:
+        return []
+    return ["Ethernet" + suffix, "Eth" + suffix, "E" + suffix]
 
 
 def _install_nxos_interface_aliases():
@@ -21,22 +32,15 @@ def _install_nxos_interface_aliases():
     def find_interface(self, lab, node_id, wanted):
         try:
             return current(self, lab, node_id, wanted)
-        except RuntimeError as original:
-            text = str(wanted or "").strip()
-            match = re.fullmatch(r"(?i)(ethernet|eth|e)(\d+(?:/\d+)+)", text)
-            aliases = []
-            if match:
-                suffix = match.group(2)
-                aliases = ["Ethernet" + suffix, "Eth" + suffix, "E" + suffix]
-
-            for alias in aliases:
-                if alias == text:
+        except RuntimeError:
+            for alias in _nxos_interface_aliases(wanted):
+                if alias == str(wanted or "").strip():
                     continue
                 try:
                     return current(self, lab, node_id, alias)
                 except RuntimeError:
                     pass
-            raise original
+            raise
 
     find_interface._nxos_alias_support = True
     LabBuilder._find_interface_index = find_interface
