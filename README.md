@@ -1,5 +1,9 @@
 # CCNA 200-301 EVE-NG Lab Builder
 
+> [!IMPORTANT]
+> ### 💡 Une idée et un concept de **Guillaume Paré**
+> **Original idea & concept by Guillaume Paré.**
+
 A desktop GUI for building, practicing, and validating **CCNA 200-301** labs on an **existing EVE-NG server**, using Cisco IOSv and IOSvL2 images that you provide legally.
 
 > **Deployment scope:** EVE-NG is assumed to be already deployed and operational. This repository does **not** install, provision, package, or deploy EVE-NG. The CCNA EVE Lab Builder application is intended to be run directly from source on Windows, macOS, or Linux.
@@ -505,6 +509,7 @@ See [Troubleshooting](docs/TROUBLESHOOTING.md) for more detail.
 
 ## Documentation
 
+- [Project origin & credits](CREDITS.md)
 - [Application installation](docs/INSTALLATION.md)
 - [Existing EVE-NG integration](docs/EVE-NG.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -535,6 +540,8 @@ ruff check ccna_lab_builder tests
 ```
 
 ## Legal and attribution
+
+**Original idea and concept: Guillaume Paré.** See [Project Origin & Credits](CREDITS.md).
 
 This project is not affiliated with Cisco or EVE-NG. Cisco, IOS, IOSv, EVE-NG, and related marks belong to their respective owners.
 
