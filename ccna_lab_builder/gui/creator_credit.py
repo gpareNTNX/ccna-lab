@@ -1,15 +1,16 @@
-"""Visible creator attribution for the desktop application."""
+"""Visible project-origin attribution for the desktop application."""
 
 from __future__ import annotations
 
 import tkinter as tk
 
 CREATOR = "Guillaume Paré"
-CREDIT_TEXT = f"Created by {CREATOR}"
+CREDIT_TEXT = f"Idea & concept by {CREATOR}"
+CREDIT_SIDEBAR_TEXT = f"Une idée et un concept de\n{CREATOR}"
 
 
 def install_creator_credit(window):
-    """Display a persistent creator credit in the sidebar and window title."""
+    """Display a persistent project-origin credit in the sidebar and window title."""
     if getattr(window, "_creator_credit_installed", False):
         return window
 
@@ -17,9 +18,10 @@ def install_creator_credit(window):
     if sidebar is not None:
         label = tk.Label(
             sidebar,
-            text=CREDIT_TEXT,
+            text=CREDIT_SIDEBAR_TEXT,
             bg=window.SIDEBAR,
-            fg=window.MUTED,
+            fg=window.ACCENT,
+            justify="left",
             font=(window.font_family, 8, "bold"),
         )
         label.pack(side="bottom", anchor="w", padx=20, pady=(0, 8))
