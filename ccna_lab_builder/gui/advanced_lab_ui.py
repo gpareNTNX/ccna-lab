@@ -1,11 +1,8 @@
 """UI polish for the combined Cisco Challenge and Advanced lab workspace."""
 
-from __future__ import annotations
-
 import types
 
 from ccna_lab_builder.gui import challenge_pack as _challenge_pack
-
 
 PAGE_TITLE = "Cisco Challenge + Advanced Labs"
 PAGE_SUBTITLE = (
