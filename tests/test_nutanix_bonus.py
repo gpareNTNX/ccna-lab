@@ -12,7 +12,10 @@ from ccna_lab_builder.gui.nutanix_bonus import (
 class NutanixBonusTests(unittest.TestCase):
     def test_catalog_contains_only_isolated_buildable_bonus_labs(self):
         labs = NutanixBonusCatalog().all()
-        self.assertEqual([lab["id"] for lab in labs], ["NTNX-B01"])
+        self.assertEqual(
+            [lab["id"] for lab in labs],
+            ["NTNX-B01", "NTNX-B02", "NTNX-B03"],
+        )
         self.assertTrue(all(lab["buildable"] for lab in labs))
         self.assertTrue(all(lab["catalog"] == "nutanix_bonus" for lab in labs))
 
@@ -52,16 +55,53 @@ class NutanixBonusTests(unittest.TestCase):
         self.assertIn("port-security", tasks)
         self.assertIn("ipv6 link-local", tasks)
 
+    def test_b02_is_vpc_operations_and_recovery(self):
+        lab = NutanixBonusCatalog().get("NTNX-B02")
+        text = "\n".join(lab["tasks"] + lab["notes"]).casefold()
+        expected = "\n".join(
+            value
+            for check in lab["checks"]
+            for value in check.get("contains", [])
+        ).casefold()
+        self.assertIn("failure", lab["objective"].casefold())
+        self.assertIn("show vpc", text)
+        self.assertIn("vpc domain 20", expected)
+        self.assertIn("channel-group 200 mode active", expected)
+
+    def test_b03_is_compact_vxlan_evpn_fabric(self):
+        lab = NutanixBonusCatalog().get("NTNX-B03")
+        expected = "\n".join(
+            value
+            for check in lab["checks"]
+            for value in check.get("contains", [])
+        ).casefold()
+        self.assertIn("feature nv overlay", expected)
+        self.assertIn("nv overlay evpn", expected)
+        self.assertIn("member vni 10010", expected)
+        self.assertIn("ingress-replication protocol bgp", expected)
+        self.assertIn("address-family l2vpn evpn", expected)
+
     def test_checks_never_target_vpcs(self):
-        lab = NutanixBonusCatalog().get("NTNX-B01")
-        templates = {
-            node["name"]: node["template"]
-            for node in lab["topology"]["nodes"]
-        }
-        self.assertTrue(lab["checks"])
-        self.assertTrue(
-            all(templates[check["node"]] == NXOS_TEMPLATE for check in lab["checks"])
-        )
+        for lab in NutanixBonusCatalog().all():
+            templates = {
+                node["name"]: node["template"]
+                for node in lab["topology"]["nodes"]
+            }
+            self.assertTrue(lab["checks"])
+            self.assertTrue(
+                all(templates[check["node"]] == NXOS_TEMPLATE for check in lab["checks"])
+            )
+
+    def test_bonus_topologies_do_not_reuse_interfaces(self):
+        for lab in NutanixBonusCatalog().all():
+            used = set()
+            for link in lab["topology"]["links"]:
+                for endpoint in (
+                    (link["a"], link["a_if"]),
+                    (link["b"], link["b_if"]),
+                ):
+                    self.assertNotIn(endpoint, used, f"{lab['id']} reuses {endpoint}")
+                    used.add(endpoint)
 
     def test_nxos_image_detection_is_strict(self):
         images = [

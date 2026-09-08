@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ccna_lab_builder.data.nutanix_bonus_expansion import nutanix_bonus_expansion_labs
 from ccna_lab_builder.data.nutanix_bonus_labs import nutanix_bonus_labs
 
 
@@ -9,7 +10,7 @@ class NutanixBonusCatalog:
     """Keep Nutanix bonus IDs separate from CCNA and Cisco Challenge catalogs."""
 
     def __init__(self):
-        self._labs = nutanix_bonus_labs()
+        self._labs = nutanix_bonus_labs() + nutanix_bonus_expansion_labs()
         ids = [item["id"] for item in self._labs]
         if len(ids) != len(set(ids)):
             raise ValueError("Duplicate Nutanix bonus lab id detected.")
