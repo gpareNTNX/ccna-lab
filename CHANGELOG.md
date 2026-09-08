@@ -8,6 +8,16 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 5.2.2 — 2026-09-08
+
+- Fixed Advanced lab SSH-native cabling when EVE-NG API node IDs temporarily differ from the freshly generated `.unl` node IDs
+- Made exact `.unl` node names authoritative during SSH-native link creation while preserving endpoint and interface validation
+- Expanded installed-image discovery to show every QEMU image folder instead of hiding unsupported families
+- Added inventory discovery for IOL, Dynamips and Docker images on the connected EVE-NG host
+- Added case-insensitive IOSv detection plus `vios_l2-*` and related IOSvL2 folder aliases
+- Added an Installed EVE-NG image inventory panel to the Images page
+- Added regression tests for stale API node IDs and complete multi-family image inventory parsing
+
 ## 5.1.2 — 2026-09-07
 
 - Increased graceful QEMU shutdown confirmation during lab swaps from 10 to 30 seconds
