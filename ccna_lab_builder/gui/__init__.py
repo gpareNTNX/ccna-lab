@@ -1,6 +1,7 @@
 """GUI package bootstrap extensions."""
 
 from ccna_lab_builder.gui import topology_canvas as _topology_canvas
+from ccna_lab_builder.gui.advanced_lab_ui import install_advanced_lab_ui
 from ccna_lab_builder.gui.automatic_cabling import install_automatic_cabling
 from ccna_lab_builder.gui.challenge_pack import install_challenge_pack
 from ccna_lab_builder.gui.connection_feedback import install_connection_feedback
@@ -42,6 +43,7 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
         install_ssh_native_cabling(window)
         install_vlan_validation_compat(window)
         install_challenge_pack(window)
+        install_advanced_lab_ui(window)
         install_learning_experience(window)
         install_manual_validation_only(window)
         install_nutanix_bonus(window)
