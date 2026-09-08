@@ -10,12 +10,12 @@ from ccna_lab_builder.gui.challenge_pack import (
 
 
 class ChallengeCatalogTests(unittest.TestCase):
-    def test_challenge_pack_is_separate_from_37_ccna_labs(self):
+    def test_challenge_and_advanced_packs_are_separate_from_37_ccna_labs(self):
         self.assertEqual(len(ScenarioCatalog().all()), 37)
         catalog = ChallengeCatalog()
-        self.assertEqual(len(catalog.all()), 8)
+        self.assertEqual(len(catalog.all()), 16)
         self.assertEqual(catalog.archive(), [])
-        self.assertTrue(all(item["id"].startswith("PT-C") for item in catalog.all()))
+        self.assertTrue(all(not item["id"].isdigit() for item in catalog.all()))
         self.assertTrue(all(item.get("buildable") for item in catalog.all()))
 
     def test_challenge_topologies_are_self_contained(self):
@@ -43,7 +43,7 @@ class ChallengeCatalogTests(unittest.TestCase):
                 )
                 self.assertNotEqual(target.get("template"), "vpcs")
 
-    def test_only_converted_challenges_are_exposed(self):
+    def test_catalog_contains_converted_and_advanced_labs(self):
         catalog = ChallengeCatalog()
         self.assertEqual(
             [item["id"] for item in catalog.all()],
@@ -56,7 +56,22 @@ class ChallengeCatalogTests(unittest.TestCase):
                 "PT-C06",
                 "PT-C07",
                 "PT-C08",
+                "ADV-C01",
+                "ADV-C02",
+                "ADV-C03",
+                "ADV-C04",
+                "ADV-C05",
+                "ADV-C06",
+                "ADV-C07",
+                "ADV-C08",
             ],
+        )
+        self.assertTrue(
+            all(
+                item["pack"] == "Advanced Cisco"
+                for item in catalog.all()
+                if item["id"].startswith("ADV-C")
+            )
         )
         self.assertFalse(catalog.archive())
 
