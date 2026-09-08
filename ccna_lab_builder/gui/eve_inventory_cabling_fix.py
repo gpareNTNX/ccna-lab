@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import types
 import tkinter as tk
+import types
 from tkinter import ttk
 
 from ccna_lab_builder.gui import nutanix_bonus_scan_fix as _scan_fix
