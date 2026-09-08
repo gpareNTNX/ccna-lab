@@ -86,19 +86,15 @@ class EveInventoryCablingFixTests(unittest.TestCase):
 
     def test_full_inventory_parser_keeps_all_eve_families(self):
         parsed = _parse_inventory_output(
-            "\n".join(
-                [
-                    "__QEMU__",
-                    "vios-159",
-                    "csr1000vng-17.9",
-                    "__IOL__",
-                    "i86bi-linux-l2.bin",
-                    "__DYNAMIPS__",
-                    "c7200-adventerprisek9.image",
-                    "__DOCKER__",
-                    "eve-gui-server:latest",
-                ]
-            )
+            """__QEMU__
+vios-159
+csr1000vng-17.9
+__IOL__
+i86bi-linux-l2.bin
+__DYNAMIPS__
+c7200-adventerprisek9.image
+__DOCKER__
+eve-gui-server:latest"""
         )
         self.assertEqual(parsed["qemu"], ["csr1000vng-17.9", "vios-159"])
         self.assertEqual(parsed["iol"], ["i86bi-linux-l2.bin"])
