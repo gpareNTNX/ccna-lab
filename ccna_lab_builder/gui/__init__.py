@@ -9,6 +9,7 @@ from ccna_lab_builder.gui.console_lab_discovery import install_global_console_la
 from ccna_lab_builder.gui.console_target_compat import install_console_target_compat
 from ccna_lab_builder.gui.console_workspace import install_console_workspace
 from ccna_lab_builder.gui.creator_credit import install_creator_credit
+from ccna_lab_builder.gui.eve_inventory_cabling_fix import install_eve_inventory_cabling_fix
 from ccna_lab_builder.gui.lab_rebuild_console_fix import (
     install_lab_rebuild_and_console_fix,
 )
@@ -49,6 +50,7 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
         install_nutanix_bonus(window)
         install_nutanix_bonus_compat(window)
         install_nutanix_bonus_scan_fix(window)
+        install_eve_inventory_cabling_fix(window)
         install_creator_credit(window)
 
     _install_topology_and_console._console_wrapped = True
