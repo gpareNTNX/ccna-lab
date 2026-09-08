@@ -8,6 +8,16 @@
 - Separated end-user requirements from build-machine requirements
 - Clarified that IOS image import targets the existing EVE-NG server
 
+## 5.2.2 — 2026-09-08
+
+- Fixed Advanced lab SSH-native cabling when EVE-NG API node IDs temporarily differ from the freshly generated `.unl` node IDs
+- Made exact `.unl` node names authoritative during SSH-native link creation while preserving endpoint and interface validation
+- Expanded installed-image discovery to show every QEMU image folder instead of hiding unsupported families
+- Added inventory discovery for IOL, Dynamips and Docker images on the connected EVE-NG host
+- Added case-insensitive IOSv detection plus `vios_l2-*` and related IOSvL2 folder aliases
+- Added an Installed EVE-NG image inventory panel to the Images page
+- Added regression tests for stale API node IDs and complete multi-family image inventory parsing
+
 ## 5.1.2 — 2026-09-07
 
 - Increased graceful QEMU shutdown confirmation during lab swaps from 10 to 30 seconds
@@ -38,104 +48,108 @@
 
 ## 4.5.1 — 2026-08-30
 
-- Added runtime-aware recovery when EVE reports a node running but no exact QEMU runtime exists
-- Automatically performs a controlled node stop/start before Console or Validator gives up
-- Keeps the verified-runtime safety check and still refuses unverified EVE API Telnet ports
-- Waits for QEMU runtimes from the previous lab to fully disappear before completing a lab swap
-- Aborts a lab switch when old QEMU processes remain active after EVE accepts the stop request
-- Added runtime-recovery tests covering stale node restart and QEMU shutdown confirmation
+- Added strict runtime checks after STOP ALL so lab changes wait for QEMU to exit instead of trusting API state alone
+- Added controlled stale-node recovery for console access: verify PID state, stop stale nodes, wait for runtime exit, restart, then verify console readiness
+- Prevented automatic lab swaps from continuing while the previous lab still has running QEMU processes
 
-## 4.5.0 — 2026-08-28
+## 4.5.0 — 2026-08-30
 
-- Added strict Single Active Lab coordination for EVE-NG sessions
-- Automatically disconnects all interactive device consoles before switching labs
-- Automatically stops every node in the previously active lab before activating another lab
-- Performs an initial EVE lab safety sweep after application launch to stop labs left active by a prior session
-- Prevents target activation when the previous lab cannot be stopped successfully
-- Applies automatic lab switching to Master Lab build/start, Training Lab creation, Live Validator and Device Console access
-- Added an Active Lab status strip and manual `STOP & CLOSE ACTIVE LAB` control in Device Console
-- Added unit tests for first activation cleanup, same-lab reuse, lab swaps, failure handling and manual close
+- Added a global single-active-lab controller across Master, Training, Challenge and Device Console workflows
+- Switching labs now closes interactive console sessions for the previous topology before the change
+- Automatically stops the previously active EVE-NG lab before starting or opening another one
+- On first lab activation, discovers other EVE-NG labs in the configured folder and stops them so only the selected topology remains active
+- Added a header indicator showing which lab is active/stopped and why a swap is happening
+- Added a `STOP & CLOSE ACTIVE LAB` control for safely stopping the tracked lab and clearing its console sessions
+- Reused the controller in the existing challenge cleanup path so all lab types follow the same runtime policy
+- Added regression tests for first activation cleanup, subsequent swaps, same-lab reuse and stop-failure aborts
 
-## 4.4.0 — 2026-08-28
+## 4.4.0 — 2026-08-30
 
-- Enabled automatic EVE-NG cabling for every newly generated Master Lab and Training Lab
-- Removed the need to manually enable the previous experimental cabling toggle
-- Legacy labs 01–20 now generate with the reusable Master Topology links automatically connected
-- Scenario V2/workbook labs automatically connect the links defined by their own topology data
-- Lab generation now fails visibly when EVE-NG cannot create a requested link instead of silently leaving an isolated topology
-- Added generation logs showing the expected number of automatically created links
-- Added automatic-cabling unit tests for Master, legacy training and Scenario V2 generation
+- Added SSH-native automatic cabling for generated Master and Training labs
+- Replaced EVE-NG REST network/link creation with direct `.unl` topology editing over SSH to avoid Community-edition HTTP 400 `Invalid network id` failures
+- Generated links now use hidden Ethernet bridge networks and exact interface IDs, followed by EVE fixpermissions and lab reopen
+- Disabled the legacy `Experimental API cabling` checkbox because automatic SSH-native cabling is now the stable default path
+- Added regression tests for `.unl` path safety and hidden-link generation
 
-## 4.3.3 — 2026-08-28
+## 4.3.2 — 2026-08-30
 
-- Fixed interactive console rendering of IOS carriage returns, backspaces and cursor-control sequences
-- Added stateful VT/ANSI handling for cursor movement, line erase and clear-screen operations
-- Suppressed OSC terminal-title sequences such as `]0;R1-EDGE` from the visible console
-- Added support for ANSI/OSC sequences split across multiple console packets
-- Restored Cisco `Ctrl+C` interrupt behavior while keeping macOS `Command+C` and Ctrl+Shift+C for copy
-- Added terminal-stream unit tests covering OSC, backspace, cursor overwrite, CR rewrite and clear-screen behavior
+- Verified installed VPCS console ports against the live QEMU runtime before using them
+- Added Community fallback console-port derivation for the standard `32768 + pod*128 + node_id` mapping when the runtime uses the EVE wrapper stdio backend
+- Extended SSH runtime parsing to recognize `/opt/unetlab/wrappers/unl_wrapper` VPCS processes in addition to direct QEMU command lines
+- Added regression tests for exact VPCS runtime ports and Community pod/node port derivation
 
-## 4.3.2 — 2026-08-21
+## 4.3.1 — 2026-08-30
 
-- Added recursive discovery of real EVE-NG `.unl` labs through the existing SSH connection
-- Added an `EVE LAB` selector and refresh control to Device Console
-- Added AUTO resolution across `/opt/unetlab/labs`, including labs outside the configured folder
-- Added safe ambiguity handling when multiple labs contain the same topology node
-- Added clearer diagnostics showing discovered EVE labs when no matching node can be found
+- Fixed Community-edition challenge console startup for VPCS nodes when the API returns Guacamole paths or no native console port
+- Challenge consoles now reuse the same EVE runtime discovery backend as IOSv/IOSvL2 consoles and retry after node start
+- Added VPCS-aware console validation and regression tests for runtime-discovered console ports
 
-## 4.3.1 — 2026-08-21
+## 4.3.0 — 2026-08-30
 
-- Fixed Device Console attempts against predicted `.unl` paths that do not exist on EVE-NG
-- Added verification of the active topology lab before opening an IOS console
-- Added scenario/Validator target resolution and configured-folder discovery for matching labs
-- Added clear guidance to build the Master Lab or create the selected scenario when no real lab exists
-- Preserved exact EVE-NG runtime/QEMU console discovery after the lab target is resolved
+- Added an isolated `Cisco Challenge` lab pack sourced from the five challenge `.unl` files in the supplied EVE-NG workbook
+- Added per-scenario EVE-NG lab creation so converted labs use their own topology instead of the shared 12-node Master topology
+- Added built-in VPCS node support for challenge topologies, including native EVE-NG `vpcs` payloads and console access
+- Added Challenge Lab UI with objectives, tasks, topology rendering, lab creation, console shortcuts and live validation
+- Added automatic rollback cleanup when a challenge lab build fails after creating the `.unl`
+- Added tests to guarantee the 37 CCNA labs remain unchanged and converted challenge topologies are self-contained
+- Documented source provenance and the workbook answer-key conflict for the HSRPv2 lab
 
-## 4.3.0 — 2026-08-21
+## 4.2.0 — 2026-08-30
 
-- Added a dedicated interactive Device Console workspace
-- Added double-click console access directly from Topology devices
-- Added multiple simultaneous device console tabs
-- Reused exact EVE-NG runtime/QEMU console discovery from Live Validator
-- Added interactive Enter, Tab, arrow, Ctrl+C and clipboard-paste terminal input
-- Added connect, reconnect, clear, disconnect and disconnect-all controls
-- Added user-provided router, switch, cloud, terminal, firewall and server icons
-- Added transparent optimized PNG assets without adding a runtime image dependency
-- Added icon-based topology node rendering with live validation status badges
+- Added a live learning topology workspace with real-time node status, link state and validator overlays
+- Added clickable device actions for console access and start/stop control directly from the topology map
+- Added progressive hints that turn failed checks into focused remediation guidance without immediately revealing the full solution
+- Added attempt history with validation scores, runtime actions and per-lab learning progress
+- Added a repeatable reset workflow that stops, removes and rebuilds the current training lab from a clean topology
+- Added live runtime polling against EVE-NG and live validation refresh hooks while keeping networking state tied to the real backend
 
-## 4.2.0 — 2026-08-21
+## 4.1.0 — 2026-08-30
 
-- Added an EVE-inspired graphical Topology Canvas workspace
-- Added automatic rendering of scenario nodes, links, interface labels and device groups
-- Added a Master Lab topology view sourced from the existing topology definition
-- Added a live validation overlay with per-device pass, fail and partial states
-- Added node selection for validation detail inspection
-- Added automatic synchronization between Training Lab selection and the topology view
-- Added a dedicated Topology navigation entry while preserving existing lab-builder behavior
-- Added per-page task activity feedback for IOS Images, Master Lab, Training Labs and Validator
-- Added macOS Tk Listbox compatibility handling for unsupported active color options
+- Added a guided topology preview to Master Lab and Training Labs
+- Added device-role visualization for routers, switches, hosts and infrastructure nodes
+- Added automatic lab topology rendering when a lab is selected
+- Added device console workspace with multi-tab interactive CLI sessions
+- Added topology-to-console integration so double-clicking a node opens its live EVE-NG console
+- Added manual device selector for console access from inside the application
+- Added live validation panel with command-by-command results and score display
+- Added exact-node console discovery so validation never silently targets another lab
+- Added regression tests for explicit per-lab topologies, interface reuse, validator targeting and console lookup behavior
 
-## 4.1.0 — 2026-08-12
+## 4.0.0 — 2026-08-30
 
-- Added Windows x64 PyInstaller deployment
-- Added Inno Setup Windows installer
-- Added macOS Apple Silicon packaging
-- Added macOS Intel packaging
-- Added DMG creation
-- Added optional Developer ID signing support
-- Added Apple notarytool / stapling workflow
-- Added GitHub Actions multi-platform release pipeline
-- Added deployment documentation and tests
+- Redesigned the entire desktop UI with a modern CCNA learning-dashboard layout
+- Added sidebar navigation, dashboard overview cards, connection status chips and page-level actions
+- Added a persistent activity log so long-running EVE-NG tasks stay visible without blocking dialogs
+- Added an async task runner so connectivity tests, image scans, image imports, master-lab generation and training-lab generation no longer freeze the interface
+- Added task progress indicators and clearer Ready / Working / Error state feedback
+- Preserved all existing EVE-NG API, SSH, lab generation, validator and compatibility functionality
 
-## 4.0.0 — 2026-08-12
+## 3.1.0 — 2026-08-30
 
-- Reorganized project for GitHub
-- Added persistent non-secret settings
-- Added EVE-NG API client cleanup
-- Added image inventory scanning
-- Added 20 data-driven CCNA scenarios
-- Added fresh scenario-lab creation
-- Added live SSH-tunneled console validation
-- Added compatibility-isolated experimental cabling
-- Added tests and GitHub Actions CI
-- Added complete project documentation
+- Fixed GUI freezing during Test Connection when EVE-NG is slow or unreachable
+- Added HTTP and SSH connection timeouts so failed tests return promptly instead of hanging indefinitely
+- Added a visible progress state while connectivity tests run
+- Restored the Test Connection button after both successful and failed attempts
+- Added friendly connection error messages with guidance to verify EVE-NG host, port and credentials
+
+## 3.0.0 — 2026-08-30
+
+- Replaced the old `images/` staging workflow with direct image import from the GUI
+- Added separate router and switch image selectors to the `IOS Images` tab
+- Added automatic IOSv / IOSvL2 image detection before upload
+- Added automatic upload into the correct EVE-NG QEMU folder
+- Added automatic `fixpermissions` after each upload
+- Added an EVE-NG `SCAN INSTALLED IMAGES` action so the app can reuse images already present on the server
+- Added persistent EVE-NG settings stored outside the application bundle
+
+## 2.0.0 — 2026-08-30
+
+- Added installer-first deployment for macOS and Windows
+- Added EVE-NG host/user/password SSH configuration to the GUI and persistent settings
+- Added SSH upload support for IOSv and IOSvL2 images with automatic EVE-NG `fixpermissions`
+- Added native macOS packaging (`.app` + `.dmg`) with launch script and installer guide
+- Added native Windows packaging (`.exe`) with installer script and guide
+
+## 1.0.0 — 2026-08-30
+
+- Initial structured release
