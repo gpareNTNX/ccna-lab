@@ -1,5 +1,6 @@
 """UI polish for the combined Cisco Challenge and Advanced lab workspace."""
 
+import tkinter as tk
 import types
 
 from ccna_lab_builder.gui import challenge_pack as _challenge_pack
@@ -30,6 +31,23 @@ def _install_pack_aware_topology():
     _challenge_pack._render_topology = render
 
 
+def _widget_text(widget):
+    """Return a widget text option when it exists, otherwise None.
+
+    Tk 9 raises TclError when ``cget('text')`` is called on containers such as
+    ``Frame``. The challenge page contains a mix of labels and containers, so
+    label discovery must treat missing text options as normal rather than as a
+    startup failure.
+    """
+    try:
+        options = widget.keys()
+        if "text" not in options:
+            return None
+        return str(widget.cget("text"))
+    except (AttributeError, TypeError, tk.TclError):
+        return None
+
+
 def _rename_page_labels(window):
     page = getattr(window, "t_challenges", None)
     if page is None:
@@ -37,13 +55,10 @@ def _rename_page_labels(window):
 
     for container in page.winfo_children():
         for child in container.winfo_children():
-            try:
-                text = str(child.cget("text"))
-            except (AttributeError, TypeError):
-                continue
+            text = _widget_text(child)
             if text == "Cisco Challenge Labs":
                 child.configure(text=PAGE_TITLE)
-            elif "Converted EVE-NG challenges only" in text:
+            elif text and "Converted EVE-NG challenges only" in text:
                 child.configure(text=PAGE_SUBTITLE)
 
 
