@@ -96,6 +96,39 @@ class ScenarioV2Tests(unittest.TestCase):
         self.assertTrue(Validator.validate_output(check, good).passed)
         self.assertFalse(Validator.validate_output(check, bad).passed)
 
+    def test_route_assertion_accepts_routing_table_row(self):
+        check = {
+            "node": "R1",
+            "command": "show ip route 4.4.4.4",
+            "assertions": [
+                {"type": "route", "prefix": "4.4.4.4/32", "code": "O"}
+            ],
+        }
+        output = "O 4.4.4.4/32 [110/2] via 10.0.12.2, 00:00:12, GigabitEthernet0/0"
+        self.assertTrue(Validator.validate_output(check, output).passed)
+
+    def test_route_assertion_accepts_exact_prefix_detail_output(self):
+        check = {
+            "node": "R1",
+            "command": "show ip route 4.4.4.4",
+            "assertions": [
+                {"type": "route", "prefix": "4.4.4.4/32", "code": "O"}
+            ],
+        }
+        ospf_output = (
+            "Routing entry for 4.4.4.4/32\r\n"
+            "  Known via \"ospf 1\", distance 110, metric 2, type intra area\r\n"
+            "  Last update from 10.0.12.2 on GigabitEthernet0/0, 00:00:12 ago\r\n"
+            "  Routing Descriptor Blocks:\r\n"
+            "  * 10.0.12.2, from 4.4.4.4, 00:00:12 ago, via GigabitEthernet0/0\r\n"
+        )
+        static_output = (
+            "Routing entry for 4.4.4.4/32\r\n"
+            "  Known via \"static\", distance 1, metric 0\r\n"
+        )
+        self.assertTrue(Validator.validate_output(check, ospf_output).passed)
+        self.assertFalse(Validator.validate_output(check, static_output).passed)
+
     def test_legacy_contains_still_works(self):
         check = {"node": "R1", "command": "show ip ssh", "contains": ["SSH Enabled"]}
         result = Validator.validate_output(check, "SSH Enabled - version 2.0")
