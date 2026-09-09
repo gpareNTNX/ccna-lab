@@ -49,6 +49,46 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual(result.matched, ["SSH Enabled"])
 
+    def test_lab11_dhcp_checks_use_reachable_ios_output(self):
+        scenario = ScenarioCatalog().get("11")
+        checks = scenario["checks"]
+        self.assertEqual(
+            [check["command"] for check in checks],
+            [
+                "show running-config | section ip dhcp",
+                "show ip dhcp pool",
+            ],
+        )
+        self.assertEqual(
+            checks[0]["contains"],
+            [
+                "ip dhcp pool USERS",
+                "network 10.10.10.0 255.255.255.0",
+                "default-router 10.10.10.1",
+            ],
+        )
+        self.assertEqual(checks[1]["contains"], ["USERS", "10.10.10.1"])
+        self.assertNotIn("10.10.10.0", checks[1]["contains"])
+
+        config_output = (
+            "R2-HQ#show running-config | section ip dhcp\r\n"
+            "ip dhcp excluded-address 10.10.10.1 10.10.10.10\r\n"
+            "ip dhcp pool USERS\r\n"
+            " network 10.10.10.0 255.255.255.0\r\n"
+            " default-router 10.10.10.1\r\n"
+            "R2-HQ#"
+        )
+        pool_output = (
+            "R2-HQ#show ip dhcp pool\r\n"
+            "Pool USERS :\r\n"
+            " Utilization mark (high/low) : 100 / 0\r\n"
+            " Current index IP address range Leased addresses\r\n"
+            " 10.10.10.11 10.10.10.1 - 10.10.10.254 0\r\n"
+            "R2-HQ#"
+        )
+        self.assertTrue(Validator.validate_output(checks[0], config_output).passed)
+        self.assertTrue(Validator.validate_output(checks[1], pool_output).passed)
+
     def test_lab14_port_security_checks_use_reachable_ios_output(self):
         scenario = ScenarioCatalog().get("14")
         checks = scenario["checks"]
