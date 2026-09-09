@@ -24,6 +24,7 @@ from ccna_lab_builder.gui.ssh_native_cabling import install_ssh_native_cabling
 from ccna_lab_builder.gui.stability_461 import install_stability_461
 from ccna_lab_builder.gui.terminal_stream_compat import install_terminal_stream_compat
 from ccna_lab_builder.gui.validator_vlan_compat import install_vlan_validation_compat
+from ccna_lab_builder.gui.windows_console_shortcuts import install_windows_console_shortcuts
 
 
 if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", False):
@@ -35,6 +36,7 @@ if not getattr(_topology_canvas.install_topology_workspace, "_console_wrapped", 
         install_console_target_compat(window)
         install_global_console_lab_discovery(window)
         install_terminal_stream_compat(window)
+        install_windows_console_shortcuts(window)
         install_automatic_cabling(window)
         install_single_active_lab(window)
         install_runtime_recovery(window)
