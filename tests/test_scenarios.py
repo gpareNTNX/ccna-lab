@@ -49,6 +49,36 @@ class ScenarioTests(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual(result.matched, ["SSH Enabled"])
 
+    def test_lab14_port_security_checks_use_reachable_ios_output(self):
+        scenario = ScenarioCatalog().get("14")
+        checks = scenario["checks"]
+        self.assertEqual(
+            [check["command"] for check in checks],
+            [
+                "show port-security interface Gi0/1",
+                "show port-security address",
+            ],
+        )
+        self.assertEqual(
+            checks[0]["contains"],
+            ["Port Security", "Violation Mode", "Restrict"],
+        )
+        self.assertEqual(checks[1]["contains"], ["SecureSticky"])
+
+        interface_output = (
+            "Port Security : Enabled\r\n"
+            "Port Status : Secure-up\r\n"
+            "Violation Mode : Restrict\r\n"
+            "Maximum MAC Addresses : 2\r\n"
+        )
+        address_output = (
+            "Secure Mac Address Table\r\n"
+            "Vlan Mac Address Type Ports Remaining Age\r\n"
+            "10 0011.2233.4455 SecureSticky Gi0/1 -\r\n"
+        )
+        self.assertTrue(Validator.validate_output(checks[0], interface_output).passed)
+        self.assertTrue(Validator.validate_output(checks[1], address_output).passed)
+
     def test_failed_hostname_includes_exact_fix_commands(self):
         check = {
             "node": "R1-EDGE",
