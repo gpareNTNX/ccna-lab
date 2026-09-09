@@ -101,6 +101,75 @@ class Validator:
         return str(kind)
 
     @classmethod
+    def _evaluate_route_assertion(cls, assertion: Assertion, cleaned: str) -> bool:
+        prefix = str(assertion.get("prefix", ""))
+        code = str(assertion.get("code", "")).upper()
+        via = str(assertion.get("via", ""))
+        lines = cleaned.splitlines()
+
+        # Standard routing-table output, for example:
+        # O 4.4.4.4/32 [110/2] via 10.0.12.2, 00:00:12, GigabitEthernet0/0
+        for line in lines:
+            if prefix not in line:
+                continue
+            if code and not line.upper().startswith(code):
+                continue
+            if via and via not in line:
+                continue
+            return True
+
+        # A lookup for one exact prefix uses IOS' detailed route format instead:
+        # Routing entry for 4.4.4.4/32
+        #   Known via "ospf 1", distance 110, metric 2, type intra area
+        route_header = f"routing entry for {prefix}".casefold()
+        header_index = next(
+            (
+                index
+                for index, line in enumerate(lines)
+                if line.casefold().startswith(route_header)
+            ),
+            None,
+        )
+        if header_index is None:
+            return False
+
+        route_detail = "\n".join(lines[header_index:])
+        if via and via not in route_detail:
+            return False
+        if not code:
+            return True
+
+        known_via = next(
+            (
+                line
+                for line in lines[header_index + 1 :]
+                if line.casefold().startswith("known via ")
+            ),
+            "",
+        )
+        if not known_via:
+            return False
+
+        base_code = code.split()[0].rstrip("*")
+        protocol_by_code = {
+            "B": "bgp",
+            "C": "connected",
+            "D": "eigrp",
+            "L": "local",
+            "O": "ospf",
+            "R": "rip",
+            "S": "static",
+        }
+        protocol = protocol_by_code.get(base_code)
+        if protocol:
+            return re.search(
+                rf'\bKnown via\s+"{re.escape(protocol)}(?:\s+[^" ]+)?"',
+                known_via,
+                re.IGNORECASE,
+            ) is not None
+        return base_code.casefold() in known_via.casefold()
+
+    @classmethod
     def _evaluate_assertion(cls, assertion: Assertion, cleaned: str) -> bool:
         kind = assertion.get("type", "contains")
         searchable = cls._normalized_search_text(cleaned)
@@ -156,18 +225,7 @@ class Validator:
             return any(line.startswith(router_id) and state in line.upper() for line in lines)
 
         if kind == "route":
-            prefix = str(assertion.get("prefix", ""))
-            code = str(assertion.get("code", "")).upper()
-            via = str(assertion.get("via", ""))
-            for line in lines:
-                if prefix not in line:
-                    continue
-                if code and not line.upper().startswith(code):
-                    continue
-                if via and via not in line:
-                    continue
-                return True
-            return False
+            return cls._evaluate_route_assertion(assertion, cleaned)
 
         if kind == "trunk":
             interface = str(assertion.get("interface", "")).casefold()
