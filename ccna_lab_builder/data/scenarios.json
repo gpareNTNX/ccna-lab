@@ -348,6 +348,14 @@
         "command": "show port-security interface Gi0/1",
         "contains": [
           "Port Security",
+          "Violation Mode",
+          "Restrict"
+        ]
+      },
+      {
+        "node": "SW3-ACCESS",
+        "command": "show port-security address",
+        "contains": [
           "SecureSticky"
         ]
       }
